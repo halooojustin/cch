@@ -143,11 +143,23 @@ export function interactiveSelect(items: SelectItem[], hint = "Up/Down to naviga
     let pendingDelete = false;
     let deleteTimer: ReturnType<typeof setTimeout> | null = null;
 
-    function cleanup() {
+    function cleanup(clearOutput = false) {
       if (deleteTimer) clearTimeout(deleteTimer);
       process.stdin.setRawMode(false);
       process.stdin.removeListener("data", onData);
       process.stdin.pause();
+      if (clearOutput && drawnLines > 0) {
+        // Move up and clear all drawn lines
+        for (let i = 0; i < drawnLines; i++) {
+          process.stdout.write(`${ESC}[A`);
+        }
+        for (let i = 0; i < drawnLines; i++) {
+          process.stdout.write(`${CLEAR_LINE}\n`);
+        }
+        for (let i = 0; i < drawnLines; i++) {
+          process.stdout.write(`${ESC}[A`);
+        }
+      }
       process.stdout.write(CURSOR_SHOW);
     }
 
@@ -180,7 +192,7 @@ export function interactiveSelect(items: SelectItem[], hint = "Up/Down to naviga
           // dd confirmed
           pendingDelete = false;
           if (deleteTimer) clearTimeout(deleteTimer);
-          cleanup();
+          cleanup(true);
           resolve({ value: items[cursor].value, action: "delete" });
           return;
         }
