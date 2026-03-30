@@ -14,6 +14,14 @@ async function getBackend(): Promise<SessionBackend> {
 export function makeSessionName(cwd: string, description?: string): string {
   const dirName = basename(cwd);
   if (!description) return `ch-${dirName}`;
+  // Sanitize description for session name: keep ASCII alphanumeric, dash, underscore
+  const safe = description
+    .replace(/[^a-zA-Z0-9\-_ ]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 30);
+  if (safe) return `ch-${dirName}-${safe}`;
+  // Fallback to hash if description is all non-ASCII (e.g. Chinese)
   const hash = createHash("md5").update(description).digest("hex").slice(0, 6);
   return `ch-${dirName}-${hash}`;
 }
@@ -76,7 +84,7 @@ export async function resumeInSession(sessionId: string, cwd: string): Promise<v
   backend.createSession({
     name,
     command: config.claudeCommand,
-    args: ["--resume", sessionId],
+    args: [...config.claudeArgs, "--resume", sessionId],
     cwd,
   });
 }
