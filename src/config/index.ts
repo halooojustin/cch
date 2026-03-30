@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { ProviderName } from "../providers/interface.js";
 
 const CONFIG_DIR = join(homedir(), ".config", "cch");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
@@ -11,6 +12,9 @@ export interface CchConfig {
   backend: "auto" | "zellij" | "tmux";
   claudeCommand: string;
   claudeArgs: string[];
+  codexCommand: string;
+  codexArgs: string[];
+  defaultProvider: ProviderName;
   historyLimit: number;
 }
 
@@ -24,6 +28,9 @@ const DEFAULT_CONFIG: CchConfig = {
   backend: "auto",
   claudeCommand: "claude",
   claudeArgs: ["--dangerously-skip-permissions"],
+  codexCommand: "codex",
+  codexArgs: ["--no-alt-screen"],
+  defaultProvider: "claude",
   historyLimit: 100,
 };
 
@@ -52,7 +59,7 @@ export function getConfig(): CchConfig {
 
 export function setConfig(key: string, value: string): void {
   const config = readJson<Record<string, unknown>>(CONFIG_FILE, {});
-  if (key === "claudeArgs") {
+  if (key === "claudeArgs" || key === "codexArgs") {
     config[key] = value.split(",").map((s) => s.trim());
   } else if (key === "historyLimit") {
     config[key] = parseInt(value, 10);
