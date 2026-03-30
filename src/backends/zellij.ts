@@ -47,14 +47,14 @@ export class ZellijBackend implements SessionBackend {
     const dir = join(tmpdir(), "cch-zellij");
     mkdirSync(dir, { recursive: true });
 
-    const safeArgs = opts.args.map((a) => `"${a}"`).join(" ");
+    const fullCmd = [opts.command, ...opts.args].map((a) => a.includes(" ") ? `'${a}'` : a).join(" ");
     const layoutPath = join(dir, `${opts.name}-layout.kdl`);
     const configPath = join(dir, `${opts.name}-config.kdl`);
 
     const tabName = opts.description || opts.name;
     writeFileSync(
       layoutPath,
-      `layout {\n    tab name="${tabName}" {\n        pane command="${opts.command}" cwd="${opts.cwd}" {\n            args ${safeArgs}\n        }\n    }\n}\n`,
+      `layout {\n    tab name="${tabName}" {\n        pane command="zsh" cwd="${opts.cwd}" {\n            args "-lc" "${fullCmd}"\n        }\n    }\n}\n`,
     );
 
     writeFileSync(
