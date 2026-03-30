@@ -23,7 +23,7 @@ export interface SessionMeta {
 const DEFAULT_CONFIG: CchConfig = {
   backend: "auto",
   claudeCommand: "claude",
-  claudeArgs: [],
+  claudeArgs: ["--dangerously-skip-permissions"],
   historyLimit: 100,
 };
 
