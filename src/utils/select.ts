@@ -16,27 +16,48 @@ export interface SelectItem {
   value: number;
 }
 
+/** Get display width of string, accounting for wide (CJK) chars */
+export function stringWidth(str: string): number {
+  let width = 0;
+  for (let i = 0; i < str.length; i++) {
+    const code = str.codePointAt(i)!;
+    width += isWide(code) ? 2 : 1;
+    if (code > 0xffff) i++;
+  }
+  return width;
+}
+
+function isWide(code: number): boolean {
+  return code >= 0x1100 && (
+    (code <= 0x115f) ||
+    (code >= 0x2e80 && code <= 0xa4cf && code !== 0x303f) ||
+    (code >= 0xac00 && code <= 0xd7a3) ||
+    (code >= 0xf900 && code <= 0xfaff) ||
+    (code >= 0xfe10 && code <= 0xfe6f) ||
+    (code >= 0xff01 && code <= 0xff60) ||
+    (code >= 0xffe0 && code <= 0xffe6) ||
+    (code >= 0x20000 && code <= 0x2fffd) ||
+    (code >= 0x30000 && code <= 0x3fffd)
+  );
+}
+
+/** Pad string to target display width with spaces */
+export function padEndWidth(str: string, targetWidth: number): string {
+  const w = stringWidth(str);
+  return w >= targetWidth ? str : str + " ".repeat(targetWidth - w);
+}
+
 /** Truncate string to fit terminal width, accounting for wide (CJK) chars */
+/** Truncate string to fit maxWidth display columns */
 function truncate(str: string, maxWidth: number): string {
   let width = 0;
   let i = 0;
   for (; i < str.length; i++) {
     const code = str.codePointAt(i)!;
-    // CJK characters take 2 columns
-    const charWidth = (code >= 0x1100 && (
-      (code <= 0x115f) || // Hangul Jamo
-      (code >= 0x2e80 && code <= 0xa4cf && code !== 0x303f) || // CJK
-      (code >= 0xac00 && code <= 0xd7a3) || // Hangul Syllables
-      (code >= 0xf900 && code <= 0xfaff) || // CJK Compatibility
-      (code >= 0xfe10 && code <= 0xfe6f) || // CJK Forms
-      (code >= 0xff01 && code <= 0xff60) || // Fullwidth Forms
-      (code >= 0xffe0 && code <= 0xffe6) ||
-      (code >= 0x20000 && code <= 0x2fffd) ||
-      (code >= 0x30000 && code <= 0x3fffd)
-    )) ? 2 : 1;
+    const charWidth = isWide(code) ? 2 : 1;
     if (width + charWidth > maxWidth) break;
     width += charWidth;
-    if (code > 0xffff) i++; // surrogate pair
+    if (code > 0xffff) i++;
   }
   return str.slice(0, i);
 }
