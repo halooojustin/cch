@@ -15,7 +15,7 @@ export async function listCommand(n: number): Promise<void> {
     const msg = s.firstMsg.replace(/\n/g, " ").slice(0, 28);
     const project = shortenPath(s.cwd || decodePath(s.filePath.split("/").slice(-2, -1)[0]));
     const ts = s.timestamp.slice(5, 16).replace("T", " ");
-    return { label: `${num} ${padEndWidth(msg, 30)} ${project} ${ts}`, value: i };
+    return { label: `${num} ${project.padEnd(20)} ${ts} ${msg}`, value: i };
   });
 
   const selected = await interactiveSelect(items);
