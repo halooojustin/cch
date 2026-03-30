@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ProviderName } from "../providers/interface.js";
-import { parseProviderName } from "../utils/provider-selection.js";
+import { isProviderName, parseProviderName } from "../utils/provider-selection.js";
 
 const CONFIG_DIR = join(homedir(), ".config", "cch");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
@@ -55,7 +55,17 @@ function writeJson(path: string, data: unknown): void {
 }
 
 export function getConfig(): CchConfig {
-  return { ...DEFAULT_CONFIG, ...readJson<Partial<CchConfig>>(CONFIG_FILE, {}) };
+  const config = readJson<Partial<CchConfig>>(CONFIG_FILE, {});
+  const defaultProvider =
+    typeof config.defaultProvider === "string" && isProviderName(config.defaultProvider)
+      ? config.defaultProvider
+      : DEFAULT_CONFIG.defaultProvider;
+
+  return {
+    ...DEFAULT_CONFIG,
+    ...config,
+    defaultProvider,
+  };
 }
 
 export function setConfig(key: string, value: string): void {

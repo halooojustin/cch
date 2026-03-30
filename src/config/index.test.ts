@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -94,6 +94,43 @@ test("setConfig rejects invalid defaultProvider values", async () => {
     assert.throws(() => setConfig("defaultProvider", "all"), /Invalid defaultProvider/);
     assert.throws(() => setConfig("defaultProvider", "wizard"), /Invalid defaultProvider/);
     assert.equal(existsSync(configPath), false);
+  } finally {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+  }
+});
+
+test("getConfig sanitizes invalid persisted defaultProvider values", async () => {
+  const originalHome = process.env.HOME;
+  const tempHome = mkdtempSync(join(tmpdir(), "cch-config-"));
+  const configDir = join(tempHome, ".config", "cch");
+  const configPath = join(configDir, "config.json");
+  const configModuleUrl = new URL(`./index.ts?smoke=${Date.now()}`, import.meta.url);
+
+  process.env.HOME = tempHome;
+
+  try {
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          defaultProvider: "all",
+          codexCommand: "custom-codex",
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+
+    const { getConfig } = await import(configModuleUrl.href);
+    const config = getConfig();
+
+    assert.equal(config.defaultProvider, "claude");
+    assert.equal(config.codexCommand, "custom-codex");
   } finally {
     if (originalHome === undefined) {
       delete process.env.HOME;
