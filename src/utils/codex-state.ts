@@ -93,6 +93,7 @@ export function readCodexThreadsFromSqlite(
     "cwd,",
     "coalesce(git_branch, '') as git_branch,",
     "title,",
+    "title as thread_name,",
     "first_user_message,",
     "updated_at",
     "from threads",

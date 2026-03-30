@@ -3,7 +3,12 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
-import { CODEX_SESSION_INDEX, CODEX_STATE_DB, mapCodexThreadRowToHistorySession } from "../utils/codex-state.js";
+import {
+  CODEX_SESSION_INDEX,
+  CODEX_STATE_DB,
+  mapCodexThreadRowToHistorySession,
+  readCodexThreadsFromSqlite,
+} from "../utils/codex-state.js";
 import { createCodexProvider } from "./codex.js";
 
 const tempRoots: string[] = [];
@@ -83,4 +88,32 @@ test("falls back to session_index.jsonl when sqlite is unavailable", () => {
     mtime: Date.parse(updatedAt),
     title: "Fallback thread",
   });
+});
+
+test("sqlite query includes thread_name and the mapper falls back to it", () => {
+  let capturedSql = "";
+  const rows = readCodexThreadsFromSqlite(
+    "/tmp/codex.sqlite",
+    1,
+    ((command: string, args: string[]) => {
+      assert.equal(command, "sqlite3");
+      capturedSql = args[3];
+      return JSON.stringify([
+        {
+          id: "019d3f0b-e946-71d0-b19b-b11dffb547d9",
+          cwd: "/Users/wellingwong",
+          git_branch: "main",
+          title: "",
+          first_user_message: "",
+          thread_name: "Thread fallback",
+          updated_at: 1773814560000,
+        },
+      ]);
+    }) as typeof import("node:child_process").execFileSync,
+  );
+
+  assert.match(capturedSql, /title as thread_name/);
+  const session = mapCodexThreadRowToHistorySession(rows[0], "/tmp/codex.sqlite");
+
+  assert.equal(session.firstMsg, "Thread fallback");
 });
