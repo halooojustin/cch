@@ -10,7 +10,7 @@ import { resumeCommand } from "./commands/resume.js";
 import { configCommand } from "./commands/config.js";
 import { setupCommand } from "./commands/setup.js";
 import { loadSessions } from "./services/history.js";
-import { shortenPath, decodePath } from "./utils/jsonl.js";
+import { formatSessionLines } from "./ui/format.js";
 
 const program = new Command();
 
@@ -76,11 +76,9 @@ if (args.length === 0) {
   console.log("\nRecent sessions:");
   const recent = loadSessions(5);
   if (recent.length) {
-    for (const s of recent) {
-      const project = shortenPath(s.cwd || decodePath(s.filePath.split("/").slice(-2, -1)[0]));
-      const ts = s.timestamp.slice(5, 16).replace("T", " ");
-      const msg = s.firstMsg.replace(/\n/g, " ").slice(0, 30);
-      console.log(`  ${project.padEnd(20)} ${ts} ${msg}`);
+    const lines = formatSessionLines(recent);
+    for (const line of lines) {
+      console.log(`  ${line}`);
     }
     console.log("\nRun `ch ls` to browse all history.");
   } else {

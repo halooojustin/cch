@@ -1,12 +1,13 @@
-import { readFileSync, statSync, readdirSync } from "node:fs";
+import { openSync, readSync, closeSync, statSync, readdirSync } from "node:fs";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
 
-const PROJECTS_DIR = join(homedir(), ".claude", "projects");
+const PROJECTS_DIR = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "projects");
 
 export interface SessionInfo {
   sessionId: string;
   filePath: string;
+  project: string;
   cwd: string;
   gitBranch: string;
   timestamp: string;
@@ -34,9 +35,15 @@ function extractUserText(content: unknown): string {
   return "";
 }
 
-export function parseJsonl(filePath: string): SessionInfo | null {
+export function parseJsonl(filePath: string, knownMtime?: number): SessionInfo | null {
   try {
-    const raw = readFileSync(filePath, "utf-8");
+    const fd = openSync(filePath, "r");
+    let raw: string;
+    try {
+      const buf = Buffer.alloc(32768);
+      const n = readSync(fd, buf, 0, 32768, 0);
+      raw = buf.toString("utf-8", 0, n);
+    } finally { closeSync(fd); }
     const lines = raw.split("\n").slice(0, 50);
 
     let cwd = "";
@@ -73,38 +80,90 @@ export function parseJsonl(filePath: string): SessionInfo | null {
 
     if (!firstMsg) return null;
 
-    const mtime = statSync(filePath).mtimeMs;
+    // 复用已知的 mtime，避免重复 statSync
+    const mtime = knownMtime ?? statSync(filePath).mtimeMs;
     if (!timestamp) {
       timestamp = new Date(mtime).toISOString();
     }
 
-    return { sessionId, filePath, cwd, gitBranch, timestamp, firstMsg, userMsgs, mtime };
+    const project = decodePath(filePath.split("/").slice(-2, -1)[0]).split("/").pop() || (cwd ? basename(cwd) : "");
+    return { sessionId, filePath, project, cwd, gitBranch, timestamp, firstMsg, userMsgs, mtime };
   } catch {
     return null;
   }
 }
 
-export function scanAllSessions(limit: number): SessionInfo[] {
-  try {
-    const dirs = readdirSync(PROJECTS_DIR, { withFileTypes: true });
-    const sessions: SessionInfo[] = [];
+export interface FileEntry {
+  filePath: string;
+  mtime: number;
+}
 
-    for (const dir of dirs) {
-      if (!dir.isDirectory()) continue;
-      const projectPath = join(PROJECTS_DIR, dir.name);
-      const files = readdirSync(projectPath, { withFileTypes: true });
-      for (const file of files) {
-        if (!file.isFile() || !file.name.endsWith(".jsonl")) continue;
-        const info = parseJsonl(join(projectPath, file.name));
+/**
+ * 收集所有 .jsonl 文件路径和 mtime，不读取文件内容
+ */
+export function collectFileEntries(excludeDirs: string[] = []): FileEntry[] {
+  const entries: FileEntry[] = [];
+  const dirs = readdirSync(PROJECTS_DIR, { withFileTypes: true });
+  for (const dir of dirs) {
+    if (!dir.isDirectory()) continue;
+    if (excludeDirs.some((pattern) => dir.name.includes(pattern))) continue;
+    const projectPath = join(PROJECTS_DIR, dir.name);
+    const files = readdirSync(projectPath, { withFileTypes: true });
+    for (const file of files) {
+      if (!file.isFile() || !file.name.endsWith(".jsonl")) continue;
+      const filePath = join(projectPath, file.name);
+      try {
+        const mtime = statSync(filePath).mtimeMs;
+        entries.push({ filePath, mtime });
+      } catch { /* skip unreadable */ }
+    }
+  }
+  return entries;
+}
+
+export function scanAllSessions(limit: number, cache?: Record<string, { mtime: number }>, excludeDirs?: string[]): SessionInfo[] {
+  try {
+    // 阶段1: 只收集文件路径和 mtime（轻量 stat 操作）
+    const entries = collectFileEntries(excludeDirs);
+
+    // 阶段2: 按 mtime 降序排序，只取 top N
+    entries.sort((a, b) => b.mtime - a.mtime);
+    const topEntries = entries.slice(0, limit);
+
+    // 阶段3: 只解析 top N 文件，缓存命中的跳过解析
+    const sessions: SessionInfo[] = [];
+    for (const entry of topEntries) {
+      const cached = cache?.[entry.filePath];
+      if (cached && cached.mtime === entry.mtime) {
+        // 缓存命中，跳过文件读取，由调用方填充完整数据
+        sessions.push({ filePath: entry.filePath, mtime: entry.mtime } as SessionInfo);
+      } else {
+        const info = parseJsonl(entry.filePath, entry.mtime);
         if (info) sessions.push(info);
       }
     }
 
-    sessions.sort((a, b) => b.mtime - a.mtime);
-    return sessions.slice(0, limit);
+    return sessions;
   } catch {
     return [];
   }
+}
+
+/** 根据 sessionId 在 projects 目录下查找并解析 jsonl 文件 */
+export function findSessionById(sessionId: string, excludeDirs: string[] = []): SessionInfo | null {
+  try {
+    const dirs = readdirSync(PROJECTS_DIR, { withFileTypes: true });
+    for (const dir of dirs) {
+      if (!dir.isDirectory()) continue;
+      if (excludeDirs.some((p) => dir.name.includes(p))) continue;
+      const filePath = join(PROJECTS_DIR, dir.name, `${sessionId}.jsonl`);
+      try {
+        const mtime = statSync(filePath).mtimeMs;
+        return parseJsonl(filePath, mtime);
+      } catch { /* file not found in this dir */ }
+    }
+  } catch { /* projects dir not found */ }
+  return null;
 }
 
 export function decodePath(dirname: string): string {

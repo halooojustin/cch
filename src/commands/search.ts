@@ -1,7 +1,8 @@
 import { searchSessions } from "../services/history.js";
-import { shortenPath, decodePath } from "../utils/jsonl.js";
 import { resumeInSession } from "../services/session.js";
-import { createInterface } from "node:readline";
+import { formatSessionLines } from "../ui/format.js";
+import { interactiveSelect } from "../ui/select.js";
+import pc from "picocolors";
 
 export async function searchCommand(keyword: string): Promise<void> {
   console.log(`Searching "${keyword}" ...`);
@@ -12,25 +13,15 @@ export async function searchCommand(keyword: string): Promise<void> {
     return;
   }
 
-  console.log(`\nFound ${matches.length} sessions:\n`);
-  for (let i = 0; i < Math.min(matches.length, 15); i++) {
-    const s = matches[i];
-    const ts = s.timestamp.slice(0, 16).replace("T", " ");
-    const project = shortenPath(s.cwd || decodePath(s.filePath.split("/").slice(-2, -1)[0]));
-    const msg = s.firstMsg.replace(/\n/g, " ").slice(0, 50);
-    console.log(`  ${String(i + 1).padStart(2)}  ${ts}  ${project.padEnd(28)}  ${msg}`);
-  }
+  console.log(pc.dim(`\nFound ${matches.length} sessions:\n`));
 
-  if (process.stdin.isTTY) {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const answer = await new Promise<string>((resolve) => {
-      rl.question("\nEnter number to resume (Enter to exit): ", resolve);
-    });
-    rl.close();
-    const idx = parseInt(answer, 10);
-    if (idx >= 1 && idx <= matches.length) {
-      const s = matches[idx - 1];
-      await resumeInSession(s.sessionId, s.cwd, s.firstMsg.replace(/\n/g, " ").slice(0, 50));
-    }
+  const top = matches.slice(0, 50);
+  const labels = formatSessionLines(top);
+  const items = labels.map((label, i) => ({ label, value: i }));
+
+  const selected = await interactiveSelect(items, { hint: `↑↓/jk 导航 · 数字跳转 · Enter 恢复会话 · Esc 取消` });
+  if (selected >= 0) {
+    const s = top[selected];
+    await resumeInSession(s.sessionId, s.cwd);
   }
 }

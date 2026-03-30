@@ -12,6 +12,7 @@ export interface CchConfig {
   claudeCommand: string;
   claudeArgs: string[];
   historyLimit: number;
+  excludeDirs: string[];
 }
 
 export interface SessionMeta {
@@ -25,6 +26,7 @@ const DEFAULT_CONFIG: CchConfig = {
   claudeCommand: "claude",
   claudeArgs: ["--dangerously-skip-permissions"],
   historyLimit: 100,
+  excludeDirs: ["claude-mem"],
 };
 
 function ensureDir(): void {
@@ -46,13 +48,19 @@ function writeJson(path: string, data: unknown): void {
   writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
 }
 
+// 进程内缓存：CLI 短生命周期，每个文件只需读一次
+let configCache: CchConfig | null = null;
+
 export function getConfig(): CchConfig {
-  return { ...DEFAULT_CONFIG, ...readJson<Partial<CchConfig>>(CONFIG_FILE, {}) };
+  if (!configCache) {
+    configCache = { ...DEFAULT_CONFIG, ...readJson<Partial<CchConfig>>(CONFIG_FILE, {}) };
+  }
+  return configCache;
 }
 
 export function setConfig(key: string, value: string): void {
   const config = readJson<Record<string, unknown>>(CONFIG_FILE, {});
-  if (key === "claudeArgs") {
+  if (key === "claudeArgs" || key === "excludeDirs") {
     config[key] = value.split(",").map((s) => s.trim());
   } else if (key === "historyLimit") {
     config[key] = parseInt(value, 10);
@@ -60,6 +68,7 @@ export function setConfig(key: string, value: string): void {
     config[key] = value;
   }
   writeJson(CONFIG_FILE, config);
+  configCache = null; // 写入后清除缓存
 }
 
 export function getSessionsMeta(): Record<string, SessionMeta> {
@@ -78,11 +87,19 @@ export function removeSessionMeta(name: string): void {
   writeJson(SESSIONS_FILE, sessions);
 }
 
+let cacheData: Record<string, unknown> | null = null;
+
 export function getCache(): Record<string, unknown> {
-  return readJson<Record<string, unknown>>(CACHE_FILE, {});
+  if (!cacheData) {
+    cacheData = readJson<Record<string, unknown>>(CACHE_FILE, {});
+  }
+  return cacheData;
 }
 
 export function writeCache(data: Record<string, unknown>): void {
+  // 简单比较：key 数量相同且引用未变则跳过
+  if (cacheData && JSON.stringify(cacheData) === JSON.stringify(data)) return;
+  cacheData = data;
   writeJson(CACHE_FILE, data);
 }
 

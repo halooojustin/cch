@@ -1,6 +1,7 @@
 import { listActiveSessions, attachToSession, killSession } from "../services/session.js";
 import { getSessionsMeta } from "../config/index.js";
-import { interactiveSelect, padEndWidth } from "../utils/select.js";
+import { formatActiveSessionLines } from "../ui/format.js";
+import { interactiveSelect } from "../ui/select.js";
 
 export async function psCommand(): Promise<void> {
   let cursorPos = 0;
@@ -19,32 +20,37 @@ export async function psCommand(): Promise<void> {
       return timeB.localeCompare(timeA);
     });
 
-    const items = sessions.map((s, i) => {
-      const num = String(i + 1).padStart(3);
-      const desc = meta[s.name]?.description || "";
-      const label = desc
-        ? `${num} ${s.name.padEnd(28)} ${s.created.padEnd(12)} ${desc}`
-        : `${num} ${s.name.padEnd(28)} ${s.created}`;
-      return { label, value: i };
+    const data = sessions.map((s) => ({
+      name: s.name,
+      created: s.created,
+      description: meta[s.name]?.description || "",
+    }));
+
+    const labels = formatActiveSessionLines(data);
+    const items = labels.map((label, i) => ({ label, value: i }));
+
+    const selected = await interactiveSelect(items, {
+      hint: "↑↓/jk 导航 · Enter 连接 · dd 终止 · Esc 取消",
+      initialCursor: cursorPos,
+      deleteKey: true,
     });
 
-    const result = await interactiveSelect(
-      items,
-      "Up/Down navigate, Enter attach, dd kill, Esc cancel",
-      { deleteKey: true, initialCursor: cursorPos },
-    );
-
-    if (result.action === "cancel") return;
-
-    if (result.action === "delete") {
-      const s = sessions[result.value];
-      cursorPos = result.value;
-      await killSession(s.name);
-      continue;
-    }
-
-    if (result.action === "select") {
-      await attachToSession(sessions[result.value].name);
+    if (typeof selected === "object" && "action" in selected) {
+      if (selected.action === "cancel") return;
+      if (selected.action === "delete") {
+        const s = sessions[selected.value];
+        cursorPos = selected.value;
+        await killSession(s.name);
+        continue;
+      }
+      if (selected.action === "select") {
+        await attachToSession(sessions[selected.value].name);
+        return;
+      }
+    } else {
+      // 简单模式返回
+      if (selected < 0) return;
+      await attachToSession(sessions[selected].name);
       return;
     }
   }
