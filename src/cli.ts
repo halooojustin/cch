@@ -1,9 +1,9 @@
 import { Command } from "commander";
-import { listCommand } from "./commands/list.js";
+import { lsCommand } from "./commands/ls.js";
 import { searchCommand } from "./commands/search.js";
 import { defaultCommand } from "./commands/default.js";
 import { newCommand } from "./commands/new.js";
-import { lsCommand } from "./commands/ls.js";
+import { psCommand } from "./commands/ps.js";
 import { attachCommand } from "./commands/attach.js";
 import { killCommand } from "./commands/kill.js";
 import { resumeCommand } from "./commands/resume.js";
@@ -19,10 +19,10 @@ program
   .version("0.1.0");
 
 program
-  .command("list")
-  .description("List recent sessions from history")
+  .command("ls")
+  .description("List recent conversation history")
   .option("-n, --number <n>", "Number of sessions to show", "20")
-  .action(async (opts) => listCommand(parseInt(opts.number, 10)));
+  .action(async (opts) => lsCommand(parseInt(opts.number, 10)));
 
 program
   .command("search <keyword>")
@@ -36,9 +36,9 @@ program
   .action((desc, opts) => newCommand(desc?.join(" ") || undefined, opts.force || false));
 
 program
-  .command("ls")
+  .command("ps")
   .description("List active multiplexer sessions")
-  .action(() => lsCommand());
+  .action(() => psCommand());
 
 program
   .command("attach <name>")
@@ -62,11 +62,10 @@ program
 
 // Default behavior: no subcommand → show help + recent sessions
 // Unknown args → treat as natural language search
-const known = ["list", "search", "new", "ls", "attach", "kill", "resume", "config", "help"];
+const known = ["ls", "search", "new", "ps", "attach", "kill", "resume", "config", "help"];
 const args = process.argv.slice(2);
 
 if (args.length === 0) {
-  // Show help + last 5 sessions
   program.outputHelp();
   console.log("\nRecent sessions:");
   const recent = loadSessions(5);
