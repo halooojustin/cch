@@ -1,5 +1,6 @@
+import { basename } from "node:path";
 import { dim, cyan, yellow, green } from "./colors.js";
-import { shortenPath, decodePath, type SessionInfo } from "../utils/jsonl.js";
+import { decodePath, type SessionInfo } from "../utils/jsonl.js";
 
 /** CJK 双宽字符检测 */
 function isWide(code: number): boolean {
@@ -48,12 +49,15 @@ function localTime(ts: string | number): string {
   return fmt.format(d).replace(/\//g, "-");
 }
 
-/** 从 SessionInfo 提取项目路径 */
+/**
+ * 从 SessionInfo 提取项目列显示名：仅取路径最后一级目录（basename），
+ * 避免 shortenPath 的多段缩写占用列宽；与 jsonl 里 project 字段语义一致。
+ */
 function projectPath(s: SessionInfo): string {
-  if (s.project) return s.project;
-  if (s.cwd) return shortenPath(s.cwd);
+  if (s.project) return basename(s.project);
+  if (s.cwd) return basename(s.cwd);
   const dir = s.filePath?.split("/").slice(-2, -1)[0];
-  return dir ? shortenPath(decodePath(dir)) : "";
+  return dir ? basename(decodePath(dir)) : "";
 }
 
 /** 提取分支显示文本 */
