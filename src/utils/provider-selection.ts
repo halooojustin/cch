@@ -1,7 +1,17 @@
-import type { ProviderSelection } from "../providers/interface.js";
+import type { ProviderName, ProviderSelection } from "../providers/interface.js";
+
+export function isProviderName(value: string): value is ProviderName {
+  return value === "claude" || value === "codex";
+}
 
 export function isProviderSelection(value: string): value is ProviderSelection {
-  return value === "claude" || value === "codex" || value === "all";
+  return isProviderName(value) || value === "all";
+}
+
+export function parseProviderName(value: string | undefined, fallback: ProviderName): ProviderName {
+  if (!value) return fallback;
+  if (!isProviderName(value)) throw new Error(`Invalid defaultProvider: ${value}`);
+  return value;
 }
 
 export function parseProviderSelection(

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -46,6 +46,54 @@ test("setConfig parses codexArgs as a list", async () => {
     const stored = JSON.parse(readFileSync(join(tempHome, ".config", "cch", "config.json"), "utf-8"));
 
     assert.deepEqual(stored.codexArgs, ["--foo", "--bar"]);
+  } finally {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+  }
+});
+
+test("setConfig persists defaultProvider when set to codex", async () => {
+  const originalHome = process.env.HOME;
+  const tempHome = mkdtempSync(join(tmpdir(), "cch-config-"));
+  const configModuleUrl = new URL(`./index.ts?smoke=${Date.now()}`, import.meta.url);
+
+  process.env.HOME = tempHome;
+
+  try {
+    const { getConfig, setConfig } = await import(configModuleUrl.href);
+    setConfig("defaultProvider", "codex");
+
+    const configPath = join(tempHome, ".config", "cch", "config.json");
+    const stored = JSON.parse(readFileSync(configPath, "utf-8"));
+
+    assert.equal(getConfig().defaultProvider, "codex");
+    assert.equal(stored.defaultProvider, "codex");
+  } finally {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+  }
+});
+
+test("setConfig rejects invalid defaultProvider values", async () => {
+  const originalHome = process.env.HOME;
+  const tempHome = mkdtempSync(join(tmpdir(), "cch-config-"));
+  const configModuleUrl = new URL(`./index.ts?smoke=${Date.now()}`, import.meta.url);
+
+  process.env.HOME = tempHome;
+
+  try {
+    const { setConfig } = await import(configModuleUrl.href);
+    const configPath = join(tempHome, ".config", "cch", "config.json");
+
+    assert.throws(() => setConfig("defaultProvider", "all"), /Invalid defaultProvider/);
+    assert.throws(() => setConfig("defaultProvider", "wizard"), /Invalid defaultProvider/);
+    assert.equal(existsSync(configPath), false);
   } finally {
     if (originalHome === undefined) {
       delete process.env.HOME;

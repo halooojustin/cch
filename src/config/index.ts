@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ProviderName } from "../providers/interface.js";
+import { parseProviderName } from "../utils/provider-selection.js";
 
 const CONFIG_DIR = join(homedir(), ".config", "cch");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
@@ -63,6 +64,8 @@ export function setConfig(key: string, value: string): void {
     config[key] = value.split(",").map((s) => s.trim());
   } else if (key === "historyLimit") {
     config[key] = parseInt(value, 10);
+  } else if (key === "defaultProvider") {
+    config[key] = parseProviderName(value, DEFAULT_CONFIG.defaultProvider);
   } else {
     config[key] = value;
   }
