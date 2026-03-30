@@ -1,7 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { scanAllSessions, parseJsonl, type SessionInfo } from "../utils/jsonl.js";
+import { parseJsonl, type SessionInfo } from "../utils/jsonl.js";
+import { scanSessions as scanClaudeSessions } from "../providers/claude.js";
+import type { HistorySession } from "../providers/interface.js";
 import { getCache, writeCache, getConfig } from "../config/index.js";
 
 const PROJECTS_DIR = join(homedir(), ".claude", "projects");
@@ -16,31 +18,45 @@ interface CacheEntry {
   userMsgs: string[];
 }
 
-export function loadSessions(limit?: number): SessionInfo[] {
+type CachedSession = HistorySession & { filePath: string };
+
+function mergeCachedSession(session: HistorySession, cached: CacheEntry | undefined): CachedSession {
+  const filePath = session.sourcePath;
+  if (cached) {
+    return {
+      ...session,
+      filePath,
+      cwd: cached.cwd,
+      gitBranch: cached.gitBranch,
+      timestamp: cached.timestamp,
+      firstMsg: cached.firstMsg,
+      userMsgs: cached.userMsgs,
+      mtime: cached.mtime,
+    };
+  }
+
+  return {
+    ...session,
+    filePath,
+  };
+}
+
+export function loadSessions(limit?: number): CachedSession[] {
   const config = getConfig();
   const n = limit ?? config.historyLimit;
   const cache = getCache() as Record<string, CacheEntry>;
-  const sessions = scanAllSessions(n);
+  const sessions = scanClaudeSessions(n);
   const newCache: Record<string, CacheEntry> = {};
 
-  const result: SessionInfo[] = [];
+  const result: CachedSession[] = [];
   for (const s of sessions) {
-    const cached = cache[s.filePath];
+    const cached = cache[s.sourcePath];
     if (cached && cached.mtime === s.mtime) {
-      result.push({
-        sessionId: cached.sessionId,
-        filePath: s.filePath,
-        cwd: cached.cwd,
-        gitBranch: cached.gitBranch,
-        timestamp: cached.timestamp,
-        firstMsg: cached.firstMsg,
-        userMsgs: cached.userMsgs,
-        mtime: cached.mtime,
-      });
-      newCache[s.filePath] = cached;
+      result.push(mergeCachedSession(s, cached));
+      newCache[s.sourcePath] = cached;
     } else {
-      result.push(s);
-      newCache[s.filePath] = {
+      result.push(mergeCachedSession(s, undefined));
+      newCache[s.sourcePath] = {
         mtime: s.mtime,
         sessionId: s.sessionId,
         cwd: s.cwd,
