@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { parseJsonl, type SessionInfo } from "../utils/jsonl.js";
-import { scanSessions as scanClaudeSessions } from "../providers/claude.js";
+import { claudeProvider } from "../providers/claude.js";
 import type { HistorySession } from "../providers/interface.js";
 import { getCache, writeCache, getConfig } from "../config/index.js";
 
@@ -18,44 +18,37 @@ interface CacheEntry {
   userMsgs: string[];
 }
 
-type CachedSession = HistorySession & { filePath: string };
-
-function mergeCachedSession(session: HistorySession, cached: CacheEntry | undefined): CachedSession {
-  const filePath = session.sourcePath;
-  if (cached) {
-    return {
-      ...session,
-      filePath,
-      cwd: cached.cwd,
-      gitBranch: cached.gitBranch,
-      timestamp: cached.timestamp,
-      firstMsg: cached.firstMsg,
-      userMsgs: cached.userMsgs,
-      mtime: cached.mtime,
-    };
+function mergeCachedSession(session: HistorySession, cached: CacheEntry | undefined): HistorySession {
+  if (!cached) {
+    return session;
   }
 
   return {
     ...session,
-    filePath,
+    cwd: cached.cwd,
+    gitBranch: cached.gitBranch,
+    timestamp: cached.timestamp,
+    firstMsg: cached.firstMsg,
+    userMsgs: cached.userMsgs,
+    mtime: cached.mtime,
   };
 }
 
-export function loadSessions(limit?: number): CachedSession[] {
+export function loadSessions(limit?: number): HistorySession[] {
   const config = getConfig();
   const n = limit ?? config.historyLimit;
   const cache = getCache() as Record<string, CacheEntry>;
-  const sessions = scanClaudeSessions(n);
+  const sessions = claudeProvider.scanSessions(n);
   const newCache: Record<string, CacheEntry> = {};
 
-  const result: CachedSession[] = [];
+  const result: HistorySession[] = [];
   for (const s of sessions) {
     const cached = cache[s.sourcePath];
     if (cached && cached.mtime === s.mtime) {
       result.push(mergeCachedSession(s, cached));
       newCache[s.sourcePath] = cached;
     } else {
-      result.push(mergeCachedSession(s, undefined));
+      result.push(s);
       newCache[s.sourcePath] = {
         mtime: s.mtime,
         sessionId: s.sessionId,

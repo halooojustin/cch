@@ -1,5 +1,5 @@
 import type { SessionInfo } from "./jsonl.js";
-import { shortenPath, decodePath } from "./jsonl.js";
+import { getSessionProjectPath } from "./jsonl.js";
 import { getSessionsMeta } from "../config/index.js";
 
 export function formatSessionTable(sessions: SessionInfo[]): string {
@@ -8,7 +8,7 @@ export function formatSessionTable(sessions: SessionInfo[]): string {
   const rows = sessions.map((s, i) => {
     const num = String(i + 1).padStart(3);
     const ts = (s.timestamp.slice(0, 16).replace("T", " ")) || "";
-    const project = shortenPath(s.cwd || decodePath(s.filePath.split("/").slice(-2, -1)[0])).padEnd(30);
+    const project = getSessionProjectPath(s).padEnd(30);
     const branch = (s.gitBranch || "-").slice(0, 14).padEnd(15);
     const msg = s.firstMsg.replace(/\n/g, " ").slice(0, 50);
     return `${num}  ${ts}  ${project}  ${branch}  ${msg}`;

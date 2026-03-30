@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync, utimesSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, beforeEach, test } from "node:test";
+import type { HistorySession } from "../providers/interface.js";
 
 const originalHome = process.env.HOME;
 const tempHome = mkdtempSync(join(tmpdir(), "cch-history-"));
@@ -10,6 +11,7 @@ process.env.HOME = tempHome;
 
 const historyModuleUrl = new URL(`./history.ts?smoke=${Date.now()}`, import.meta.url);
 const { loadSessions } = await import(historyModuleUrl.href);
+const { claudeProvider } = await import(new URL(`../providers/claude.ts?smoke=${Date.now()}`, import.meta.url).href);
 
 after(() => {
   if (originalHome === undefined) {
@@ -80,17 +82,22 @@ test("loadSessions returns normalized Claude sessions", () => {
   const sessions = loadSessions();
 
   assert.equal(sessions.length, 1);
+  assert.equal(claudeProvider.name, "claude");
   assert.deepEqual(sessions[0], {
     provider: "claude",
     sessionId: "session-one",
     sourcePath: filePath,
-    filePath,
     cwd: "/workspace/alpha",
     gitBranch: "main",
     timestamp: "2026-03-31T10:00:00.000Z",
     firstMsg: "Hello Claude",
     userMsgs: ["Hello Claude"],
     mtime: sessions[0].mtime,
+  });
+  assert.equal(Object.hasOwn(sessions[0], "filePath"), false);
+  assert.deepEqual(claudeProvider.buildResumeInvocation("session-one"), {
+    command: "claude",
+    args: ["--dangerously-skip-permissions", "--resume", "session-one"],
   });
 });
 
@@ -124,11 +131,7 @@ test("loadSessions keeps cached Claude entries sorted by mtime", () => {
     },
   });
 
-  const sessions = loadSessions(2) as Array<{
-    sourcePath: string;
-    firstMsg: string;
-    provider: string;
-  }>;
+  const sessions = loadSessions(2) as HistorySession[];
 
   assert.deepEqual(
     sessions.map((session) => session.sourcePath),

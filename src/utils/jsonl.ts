@@ -121,3 +121,12 @@ export function shortenPath(path: string): string {
   if (parts.length > 4) p = ".../" + parts.slice(-3).join("/");
   return p;
 }
+
+export function getSessionProjectPath(session: {
+  cwd: string;
+  sourcePath?: string;
+  filePath?: string;
+}): string {
+  const path = session.sourcePath ?? session.filePath ?? "";
+  return shortenPath(session.cwd || decodePath(path.split("/").slice(-2, -1)[0]));
+}

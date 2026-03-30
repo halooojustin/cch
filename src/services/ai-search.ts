@@ -1,14 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { getConfig } from "../config/index.js";
-import { shortenPath, decodePath } from "../utils/jsonl.js";
-import type { SessionInfo } from "../utils/jsonl.js";
+import { getSessionProjectPath } from "../utils/jsonl.js";
+import type { HistorySession } from "../providers/interface.js";
 
-function buildTable(sessions: SessionInfo[]): string {
+function buildTable(sessions: HistorySession[]): string {
   return sessions
     .map((s, i) => {
       const num = i + 1;
       const ts = s.timestamp.slice(0, 16).replace("T", " ");
-      const project = shortenPath(s.cwd || decodePath(s.filePath.split("/").slice(-2, -1)[0]));
+      const project = getSessionProjectPath(s);
       const branch = s.gitBranch || "-";
       const msg = s.firstMsg.replace(/\n/g, " ").slice(0, 80);
       const extra = s.userMsgs
@@ -22,7 +22,7 @@ function buildTable(sessions: SessionInfo[]): string {
     .join("\n");
 }
 
-export function aiSearch(query: string, sessions: SessionInfo[]): number[] {
+export function aiSearch(query: string, sessions: HistorySession[]): number[] {
   const config = getConfig();
   const table = buildTable(sessions);
 

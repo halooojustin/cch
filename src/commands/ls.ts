@@ -1,6 +1,6 @@
 import { loadSessions } from "../services/history.js";
 import { resumeInSession } from "../services/session.js";
-import { shortenPath, decodePath } from "../utils/jsonl.js";
+import { getSessionProjectPath } from "../utils/jsonl.js";
 import { interactiveSelect, padEndWidth } from "../utils/select.js";
 
 export async function lsCommand(n: number): Promise<void> {
@@ -13,7 +13,7 @@ export async function lsCommand(n: number): Promise<void> {
   const items = sessions.map((s, i) => {
     const num = String(i + 1).padStart(3);
     const msg = s.firstMsg.replace(/\n/g, " ").slice(0, 28);
-    const project = shortenPath(s.cwd || decodePath(s.filePath.split("/").slice(-2, -1)[0]));
+    const project = getSessionProjectPath(s);
     const ts = s.timestamp.slice(5, 16).replace("T", " ");
     return { label: `${num} ${project.padEnd(20)} ${ts} ${msg}`, value: i };
   });
