@@ -18,9 +18,9 @@ export async function lsCommand(n: number): Promise<void> {
     return { label: `${num} ${project.padEnd(20)} ${ts} ${msg}`, value: i };
   });
 
-  const selected = await interactiveSelect(items);
-  if (selected >= 0) {
-    const s = sessions[selected];
+  const result = await interactiveSelect(items);
+  if (result.action === "select" && result.value >= 0) {
+    const s = sessions[result.value];
     await resumeInSession(s.sessionId, s.cwd);
   }
 }

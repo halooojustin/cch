@@ -67,8 +67,13 @@ function stripAnsi(str: string): string {
   return str.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
-export function interactiveSelect(items: SelectItem[], hint = "Up/Down to navigate, Enter to select, Esc to cancel"): Promise<number> {
-  if (!process.stdin.isTTY) return Promise.resolve(-1);
+export interface SelectResult {
+  value: number;
+  action: "select" | "delete" | "cancel";
+}
+
+export function interactiveSelect(items: SelectItem[], hint = "Up/Down to navigate, Enter to select, Esc to cancel", options?: { deleteKey?: boolean }): Promise<SelectResult> {
+  if (!process.stdin.isTTY) return Promise.resolve({ value: -1, action: "cancel" });
 
   return new Promise((resolve) => {
     let cursor = 0;
@@ -153,23 +158,23 @@ export function interactiveSelect(items: SelectItem[], hint = "Up/Down to naviga
         if (cursor < items.length - 1) cursor++;
         draw();
       } else if (key === "\r" || key === "\n") {
-        // If there's a number in the input buffer, use that
         if (inputBuf) {
           const num = parseInt(inputBuf, 10);
           if (num >= 1 && num <= items.length) {
             cleanup();
-            resolve(items[num - 1].value);
+            resolve({ value: items[num - 1].value, action: "select" });
             return;
           }
         }
-        // Otherwise use arrow-selected item
         cleanup();
-        resolve(items[cursor].value);
+        resolve({ value: items[cursor].value, action: "select" });
+      } else if (key === "d" && options?.deleteKey && !inputBuf) {
+        cleanup();
+        resolve({ value: items[cursor].value, action: "delete" });
       } else if (key === ESC || key === "q" || key === "\x03") {
         cleanup();
-        resolve(-1);
+        resolve({ value: -1, action: "cancel" });
       } else if (key === "\x7f" || key === "\b") {
-        // Backspace
         if (inputBuf.length > 0) {
           inputBuf = inputBuf.slice(0, -1);
           draw();
