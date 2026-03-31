@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { ProviderName } from "../providers/interface.js";
+import { isProviderName, parseProviderName } from "../utils/provider-selection.js";
 
 const CONFIG_DIR = join(homedir(), ".config", "cch");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
@@ -11,6 +13,9 @@ export interface CchConfig {
   backend: "auto" | "zellij" | "tmux";
   claudeCommand: string;
   claudeArgs: string[];
+  codexCommand: string;
+  codexArgs: string[];
+  defaultProvider: ProviderName;
   historyLimit: number;
   excludeDirs: string[];
 }
@@ -25,6 +30,9 @@ const DEFAULT_CONFIG: CchConfig = {
   backend: "auto",
   claudeCommand: "claude",
   claudeArgs: ["--dangerously-skip-permissions"],
+  codexCommand: "codex",
+  codexArgs: ["--no-alt-screen"],
+  defaultProvider: "claude",
   historyLimit: 100,
   excludeDirs: ["claude-mem"],
 };
@@ -53,17 +61,29 @@ let configCache: CchConfig | null = null;
 
 export function getConfig(): CchConfig {
   if (!configCache) {
-    configCache = { ...DEFAULT_CONFIG, ...readJson<Partial<CchConfig>>(CONFIG_FILE, {}) };
+    const config = readJson<Partial<CchConfig>>(CONFIG_FILE, {});
+    const defaultProvider =
+      typeof config.defaultProvider === "string" && isProviderName(config.defaultProvider)
+        ? config.defaultProvider
+        : DEFAULT_CONFIG.defaultProvider;
+
+    configCache = {
+      ...DEFAULT_CONFIG,
+      ...config,
+      defaultProvider,
+    };
   }
   return configCache;
 }
 
 export function setConfig(key: string, value: string): void {
   const config = readJson<Record<string, unknown>>(CONFIG_FILE, {});
-  if (key === "claudeArgs" || key === "excludeDirs") {
+  if (key === "claudeArgs" || key === "codexArgs" || key === "excludeDirs") {
     config[key] = value.split(",").map((s) => s.trim());
   } else if (key === "historyLimit") {
     config[key] = parseInt(value, 10);
+  } else if (key === "defaultProvider") {
+    config[key] = parseProviderName(value, DEFAULT_CONFIG.defaultProvider);
   } else {
     config[key] = value;
   }

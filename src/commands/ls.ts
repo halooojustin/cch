@@ -2,20 +2,35 @@ import { loadSessions } from "../services/history.js";
 import { resumeInSession } from "../services/session.js";
 import { formatSessionLines } from "../ui/format.js";
 import { interactiveSelect } from "../ui/select.js";
+import type { ProviderSelection } from "../providers/interface.js";
 
-export async function lsCommand(n: number): Promise<void> {
-  const sessions = loadSessions(n);
+function noSessionsMessage(provider: ProviderSelection): string {
+  if (provider === "claude") {
+    return "No sessions found in claude. Try --provider all.";
+  }
+  if (provider === "codex") {
+    return "No sessions found in codex.";
+  }
+  return "No sessions found across all providers.";
+}
+
+export async function lsCommand(
+  n: number,
+  provider: ProviderSelection = "claude",
+  showSubagents: boolean = false,
+): Promise<void> {
+  const sessions = loadSessions(provider, n, showSubagents);
   if (!sessions.length) {
-    console.log("No Claude Code history found in ~/.claude/projects/");
+    console.log(noSessionsMessage(provider));
     return;
   }
 
-  const labels = formatSessionLines(sessions);
+  const labels = formatSessionLines(sessions, provider, showSubagents);
   const items = labels.map((label, i) => ({ label, value: i }));
 
   const selected = await interactiveSelect(items, { hint: `↑↓/jk 导航 · 数字跳转 · Enter 恢复会话 · Esc 取消` });
   if (selected >= 0) {
-    const s = sessions[selected];
-    await resumeInSession(s.sessionId, s.cwd);
+    const session = sessions[selected];
+    await resumeInSession(session, session.firstMsg.replace(/\n/g, " ").slice(0, 50));
   }
 }

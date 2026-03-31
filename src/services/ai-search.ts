@@ -4,8 +4,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { getConfig } from "../config/index.js";
 import { loadSessions } from "./history.js";
-import { findSessionById } from "../utils/jsonl.js";
-import type { SessionInfo } from "../utils/jsonl.js";
+import type { HistorySession, ProviderSelection } from "../providers/interface.js";
 
 const CLAUDE_MEM_DB = join(homedir(), ".claude-mem", "claude-mem.db");
 
@@ -31,7 +30,10 @@ const MEM_SEARCH_PROMPT = `你是一个会话历史搜索助手。调用 claude-
 /** 通过 sqlite3 将 observation IDs 转为 sessionIds */
 function obsIdsToSessionIds(obsIds: number[]): string[] {
   const placeholders = obsIds.join(",");
-  const sql = `SELECT DISTINCT s.content_session_id FROM observations o JOIN sdk_sessions s ON o.memory_session_id = s.memory_session_id WHERE o.id IN (${placeholders}) AND s.content_session_id IS NOT NULL AND s.content_session_id != '' ORDER BY o.created_at_epoch DESC;`;
+  const orderBy = obsIds
+    .map((obsId, index) => `WHEN ${obsId} THEN ${index}`)
+    .join(" ");
+  const sql = `SELECT DISTINCT s.content_session_id FROM observations o JOIN sdk_sessions s ON o.memory_session_id = s.memory_session_id WHERE o.id IN (${placeholders}) AND s.content_session_id IS NOT NULL AND s.content_session_id != '' ORDER BY CASE o.id ${orderBy} END;`;
   try {
     const raw = execFileSync("sqlite3", [CLAUDE_MEM_DB, sql], {
       encoding: "utf-8",
@@ -74,37 +76,65 @@ function memSearch(query: string): string[] {
   }
 }
 
-// --- 原有 Claude CLI 搜索（需要 loadSessions） ---
+function providerLabel(session: HistorySession): string {
+  return session.provider === "claude" ? "[cl]" : "[cx]";
+}
 
-function buildTable(sessions: SessionInfo[]): string {
+function projectLabel(session: HistorySession): string {
+  if (!session.cwd) return "-";
+  const parts = session.cwd.split("/").filter(Boolean);
+  return parts.at(-1) ?? session.cwd;
+}
+
+function buildTable(
+  sessions: HistorySession[],
+  providerSelection: ProviderSelection,
+): string {
+  const showProvider = providerSelection === "all";
   return sessions
-    .map((s, i) => {
-      const num = i + 1;
-      const ts = s.timestamp.slice(0, 16).replace("T", " ");
-      const project = s.project || "-";
-      const branch = s.gitBranch || "-";
-      const msg = s.firstMsg.replace(/\n/g, " ").slice(0, 80);
-      const extra = s.userMsgs
+    .map((session, index) => {
+      const parts = [
+        `#${index + 1}`,
+      ];
+      if (showProvider) {
+        parts.push(providerLabel(session));
+      }
+      parts.push(
+        session.timestamp.slice(0, 16).replace("T", " "),
+        projectLabel(session),
+        `[${session.gitBranch || "-"}]`,
+        session.firstMsg.replace(/\n/g, " ").slice(0, 80),
+      );
+      const extra = session.userMsgs
         .slice(1, 4)
-        .map((m) => m.replace(/\n/g, " ").slice(0, 60))
+        .map((message) => message.replace(/\n/g, " ").slice(0, 60))
         .join(" / ");
-      let line = `#${num}  ${ts}  ${project}  [${branch}]  ${msg}`;
+      let line = parts.join("  ");
       if (extra) line += `  more: ${extra}`;
       return line;
     })
     .join("\n");
 }
 
-function claudeSearch(query: string): SessionInfo[] {
+function claudeSearch(
+  query: string,
+  providerSelection: ProviderSelection = "claude",
+  showSubagents: boolean = false,
+): HistorySession[] {
   const config = getConfig();
-  const sessions = loadSessions();
+  const sessions = loadSessions(providerSelection, config.historyLimit, showSubagents);
   if (!sessions.length) return [];
 
-  const table = buildTable(sessions);
+  const table = buildTable(sessions, providerSelection);
+  const providerScope = providerSelection === "all"
+    ? "Claude Code or Codex"
+    : providerSelection === "codex"
+      ? "Codex"
+      : "Claude Code";
 
-  const prompt = `你是一个会话历史搜索助手。用户想找到之前的某个 Claude Code 对话。
+  const prompt = `你是一个会话历史搜索助手。用户想找到之前的某个 ${providerScope} 对话。
 
-以下是所有会话列表（按时间倒序，#编号 时间 项目路径 [分支] 首条消息）：
+以下是候选会话列表（按时间倒序，#编号 ${providerSelection === "all" ? "提供方 " : ""}时间 项目 [分支] 首条消息）：
 
 ${table}
 
@@ -127,11 +157,11 @@ ${table}
       stdio: ["pipe", "pipe", "pipe"],
     });
 
-    const matched: SessionInfo[] = [];
+    const matched: HistorySession[] = [];
     for (const part of result.trim().replace(/\s/g, "").split(",")) {
-      const n = parseInt(part, 10);
-      if (!isNaN(n) && n >= 1 && n <= sessions.length) {
-        matched.push(sessions[n - 1]);
+      const index = parseInt(part, 10);
+      if (!Number.isNaN(index) && index >= 1 && index <= sessions.length) {
+        matched.push(sessions[index - 1]);
       }
     }
     return matched;
@@ -140,16 +170,31 @@ ${table}
   }
 }
 
-// --- 统一入口 ---
+function resolveClaudeMemSessions(sessionIds: string[]): HistorySession[] {
+  if (!sessionIds.length) return [];
 
-export function aiSearch(query: string): SessionInfo[] {
-  if (isClaudeMemInstalled()) {
+  const sessions = loadSessions("claude", Number.MAX_SAFE_INTEGER);
+  const byId = new Map(sessions.map((session) => [session.sessionId, session]));
+
+  return sessionIds
+    .map((sessionId) => byId.get(sessionId))
+    .filter((session): session is HistorySession => session !== undefined);
+}
+
+export function aiSearch(
+  query: string,
+  providerSelection: ProviderSelection = "claude",
+  showSubagents: boolean = false,
+): HistorySession[] {
+  if (providerSelection === "claude" && isClaudeMemInstalled()) {
     const results = memSearch(query);
     if (results.length > 0) {
-      const { excludeDirs } = getConfig();
-      const sessions = results.map((id) => findSessionById(id, excludeDirs)).filter((s) => s !== null);
-      return sessions.length > 0 ? sessions : claudeSearch(query);
+      const sessions = resolveClaudeMemSessions(results);
+      if (sessions.length > 0) {
+        return sessions;
+      }
     }
   }
-  return claudeSearch(query);
+
+  return claudeSearch(query, providerSelection, showSubagents);
 }

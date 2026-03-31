@@ -11,30 +11,48 @@ import { configCommand } from "./commands/config.js";
 import { setupCommand } from "./commands/setup.js";
 import { loadSessions } from "./services/history.js";
 import { formatSessionLines } from "./ui/format.js";
+import { parseBareQueryArgs, parseProviderName, parseProviderSelection } from "./utils/provider-selection.js";
 
 const program = new Command();
 
 program
   .name("ch")
   .description("Claude Code History — manage conversation history across projects")
-  .version("0.1.0");
+  .version("0.3.0");
 
 program
   .command("ls")
   .description("List recent conversation history")
   .option("-n, --number <n>", "Number of sessions to show", "20")
-  .action(async (opts) => lsCommand(parseInt(opts.number, 10)));
+  .option("--provider <provider>", "claude | codex | all", "claude")
+  .option("--show-subagents", "Show Codex subagent threads (worker/explorer)", false)
+  .action(async (opts) => lsCommand(
+    parseInt(opts.number, 10),
+    parseProviderSelection(opts.provider, "claude"),
+    opts.showSubagents ?? false,
+  ));
 
 program
   .command("search <keyword>")
   .description("Search sessions by keyword")
-  .action((keyword) => searchCommand(keyword));
+  .option("--provider <provider>", "claude | codex | all", "claude")
+  .option("--show-subagents", "Show Codex subagent threads (worker/explorer)", false)
+  .action((keyword, opts) => searchCommand(
+    keyword,
+    parseProviderSelection(opts.provider, "claude"),
+    opts.showSubagents ?? false,
+  ));
 
 program
   .command("new [description...]")
   .description("Create a new Claude session in current directory")
   .option("-f, --force", "Kill existing session with same name first")
-  .action((desc, opts) => newCommand(desc?.join(" ") || undefined, opts.force || false));
+  .option("--provider <provider>", "claude | codex", "claude")
+  .action((desc, opts) => newCommand(
+    desc?.join(" ") || undefined,
+    opts.force || false,
+    parseProviderName(opts.provider, "claude"),
+  ));
 
 program
   .command("ps")
@@ -54,7 +72,11 @@ program
 program
   .command("resume <sessionId>")
   .description("Resume a session by ID in multiplexer")
-  .action((id) => resumeCommand(id));
+  .option("--provider <provider>", "claude | codex | all", "all")
+  .action((id, opts) => resumeCommand(
+    id,
+    parseProviderSelection(opts.provider, "all"),
+  ));
 
 program
   .command("config [key] [value]")
@@ -74,9 +96,9 @@ const args = process.argv.slice(2);
 if (args.length === 0) {
   program.outputHelp();
   console.log("\nRecent sessions:");
-  const recent = loadSessions(5);
+  const recent = loadSessions("claude", 5);
   if (recent.length) {
-    const lines = formatSessionLines(recent);
+    const lines = formatSessionLines(recent, "claude");
     for (const line of lines) {
       console.log(`  ${line}`);
     }
@@ -84,9 +106,26 @@ if (args.length === 0) {
   } else {
     console.log("  No history found.");
   }
-} else if (args.length > 0 && !known.includes(args[0]) && !args[0].startsWith("-")) {
-  // Natural language search
-  defaultCommand(args.join(" "));
 } else {
-  program.parse();
+  const looksLikeBareQuery = !known.includes(args[0])
+    && (!args[0].startsWith("-") || args[0] === "--provider" || args[0].startsWith("--provider=") || args[0] === "--show-subagents");
+
+  if (looksLikeBareQuery) {
+    try {
+      const parsed = parseBareQueryArgs(args, "claude");
+      await defaultCommand(parsed.query, parsed.provider, parsed.showSubagents);
+    } catch (error) {
+      if ((error as Error).message === "Missing query") {
+        // `ch --provider codex` with no query → show history list for that provider
+        const providerArg = args[1] ?? "claude";
+        const provider = parseProviderSelection(providerArg, "claude");
+        await lsCommand(20, provider);
+      } else {
+        console.error((error as Error).message);
+        process.exitCode = 1;
+      }
+    }
+  } else {
+    await program.parseAsync();
+  }
 }

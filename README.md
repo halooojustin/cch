@@ -1,8 +1,8 @@
-# cch — Claude Code History
+# cch — Claude / Codex Conversation History
 
-AI-powered conversation history management for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+AI-powered conversation history management for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and Codex.
 
-Find any past conversation with natural language, resume it in a Zellij or tmux session — across all your projects.
+Find past conversations with natural language, browse history across projects, and resume them in Zellij or tmux.
 
 ## The Problem
 
@@ -38,7 +38,7 @@ Then you can just tell Claude Code things like "find my iOS debugging conversati
 
 ## Usage
 
-### Natural Language Search (the killer feature)
+### Natural Language Search
 
 Just describe what you remember. AI finds the session.
 
@@ -46,29 +46,39 @@ Just describe what you remember. AI finds the session.
 ch the iOS debugging session
 ch the one where I was deploying openclaw
 ch the wallet refactor last week
+ch --provider codex the one about cmux resume
+ch --provider all the session about auth redirects
 ```
 
-`ch` pipes your query + session list to `claude -p` (tries Haiku first for speed, falls back to default model), which returns the best matches. Pick one and it resumes in your multiplexer.
+For Claude scope, `ch` can use `claude-mem` semantic search when available, then fall back to Claude CLI ranking. Codex and mixed-provider search use the provider-aware session table.
 
 ### Commands
 
+```bash
+ch <description>                           Natural language search (Claude by default)
+ch --provider codex <description>          Natural language search in Codex history
+ch --provider all <description>            Natural language search across Claude + Codex
+ch ls [-n 20] [--provider <p>]             Browse history, pick to resume
+ch search <keyword> [--provider <p>]       Exact keyword search
+ch new [description] [--provider <p>]      New Claude or Codex session
+ch new -f [description] [--provider <p>]   Force new (kill old first)
+ch ps                                      List active multiplexer sessions
+ch attach <name>                           Attach to a live session
+ch kill <name>                             Kill a session
+ch resume <session-id> [--provider <p>]    Resume by session ID
+ch config                                  Show configuration
+ch setup                                   Install shell aliases
 ```
-ch <description>              Natural language search (default)
-ch list [-n 20]               List recent sessions (interactive selector)
-ch search <keyword>           Exact keyword search in conversation content
-ch new [description]          New Claude session in current directory
-ch new -f [description]       Force new (kill existing same-name session)
-ch ls                         List active multiplexer sessions (interactive selector)
-ch attach <name>              Attach to a live session
-ch kill <name>                Kill a session
-ch resume <session-id>        Resume by session ID
-ch config                     Show configuration
-ch config set <key> <value>   Set a config value
-```
+
+Provider values:
+
+- `claude`
+- `codex`
+- `all`
 
 ### Interactive Selection
 
-Both `ch list` and `ch ls` feature an interactive selector:
+`ch ls`, `ch search`, and natural-language search results all use an interactive selector:
 
 - **Up/Down arrows** or **j/k** — navigate the list
 - **Number keys** — type a number (e.g. `12`) then **Enter** to jump directly
@@ -82,7 +92,7 @@ CJK text is properly aligned with display-width-aware column padding.
 **Level 1 — Live sessions:** Session still running in your multiplexer?
 
 ```bash
-ch ls                    # interactive list — pick one to attach
+ch ps                    # interactive list — pick one to attach
 ```
 
 **Level 2 — History resume:** Session ended, but you want to pick it back up?
@@ -90,7 +100,9 @@ ch ls                    # interactive list — pick one to attach
 ```bash
 ch 那个讨论登录bug的对话     # AI finds it
 # or
-ch list                      # interactive list — pick one to resume
+ch ls                       # interactive list — pick one to resume
+ch ls --provider codex      # browse Codex history only
+ch ls --provider all        # browse merged history
 ```
 
 Both levels open in a Zellij/tmux session, so you can detach and reattach anytime. All sessions launch via login shell (`zsh -lc`) to inherit your full environment and auth.
@@ -101,6 +113,9 @@ Both levels open in a Zellij/tmux session, so you can detach and reattach anytim
 # Start a new Claude session in current project
 ch new
 
+# Start a new Codex session
+ch new --provider codex
+
 # With a description (shows up in ch ls and as Zellij tab name)
 ch new "fix authentication bug"
 ch new 修复登录bug              # Chinese descriptions work too
@@ -108,8 +123,8 @@ ch new 修复登录bug              # Chinese descriptions work too
 # Force restart (kills existing session first)
 ch new -f "start fresh on auth"
 
-# See what's running (sorted by newest first)
-ch ls
+# See what's running in the multiplexer
+ch ps
 
 # Clean up
 ch kill ch-myproject-fix-auth
@@ -132,7 +147,11 @@ Config lives at `~/.config/cch/config.json`:
   "backend": "auto",
   "claudeCommand": "claude",
   "claudeArgs": ["--dangerously-skip-permissions"],
-  "historyLimit": 100
+  "codexCommand": "codex",
+  "codexArgs": ["--no-alt-screen"],
+  "defaultProvider": "claude",
+  "historyLimit": 100,
+  "excludeDirs": ["claude-mem"]
 }
 ```
 
@@ -141,11 +160,16 @@ Config lives at `~/.config/cch/config.json`:
 | `backend` | `"auto"` | `"auto"`, `"zellij"`, or `"tmux"` |
 | `claudeCommand` | `"claude"` | Path to Claude CLI |
 | `claudeArgs` | `["--dangerously-skip-permissions"]` | Default args for new sessions and resumed sessions |
+| `codexCommand` | `"codex"` | Path to Codex CLI |
+| `codexArgs` | `["--no-alt-screen"]` | Default args for new/resumed Codex sessions |
+| `defaultProvider` | `"claude"` | Stored default provider value |
 | `historyLimit` | `100` | Max sessions loaded for AI search |
+| `excludeDirs` | `["claude-mem"]` | Project directories skipped during Claude JSONL scanning |
 
 ```bash
 ch config set backend tmux
 ch config set historyLimit 200
+ch config set codexArgs --no-alt-screen,--model,o3
 ```
 
 ## Recommended Aliases
@@ -156,6 +180,7 @@ Add to your `.zshrc` or `.bashrc`:
 alias cn="ch new"
 alias cnf="ch new -f"
 alias cls="ch ls"
+alias cps="ch ps"
 alias chs="ch search"
 ```
 
@@ -165,21 +190,40 @@ Then use:
 cn fix login bug        # new session with description
 cn 修复登录bug           # Chinese descriptions supported
 cnf                     # force restart current project session
-cls                     # interactive list of active sessions
+cls                     # interactive history browser
+cps                     # interactive active-session browser
 chs 龙虾                # keyword search
 ```
 
 ## How It Works
 
-1. **History scanning** — Reads `~/.claude/projects/**/*.jsonl`, extracts session metadata and first user messages. Results are cached (`~/.config/cch/cache.json`) by file mtime for fast subsequent lookups.
+1. **Provider-aware history** — Claude history comes from `~/.claude/projects/**/*.jsonl`; Codex history comes from `~/.codex/state_5.sqlite` with `session_index.jsonl` fallback. Both normalize into one in-memory `HistorySession` shape.
 
-2. **AI search** — Builds a text table of all sessions, sends it to `claude -p` (Haiku model preferred for speed, auto-fallback to default). Parses the response to find matching session numbers.
+2. **Claude fast path** — For Claude-only natural-language search, `cch` uses `claude-mem` when available and falls back to Claude CLI ranking.
 
-3. **Multiplexer integration** — Creates named sessions in Zellij or tmux. For Zellij, generates temporary KDL layout/config files with `zsh -lc` to ensure full shell environment. For tmux, uses standard `new-session`/`attach` commands. Auto-detects which multiplexer is available (Zellij preferred).
+3. **Mixed-provider search** — For Codex and `all` scope, `cch` builds a provider-aware session table and uses Claude CLI ranking over the filtered candidates.
 
-4. **Session naming** — Sessions are named `ch-<dirname>[-<description-or-hash>]`. English descriptions are slugified into the name; Chinese descriptions use an MD5 hash prefix. The `ch-` prefix makes them identifiable in `zellij ls` / `tmux ls`.
+4. **Multiplexer integration** — New and resumed sessions launch into Zellij or tmux. Claude resumes use `--resume <id>`; Codex resumes use `resume <id>`.
 
-5. **Session metadata** — Descriptions, cwd, and creation time are persisted in `~/.config/cch/sessions.json`, surviving reboots. Used by `ch ls` to display descriptions and sort by creation time.
+5. **Session metadata and cache** — Session descriptions live in `~/.config/cch/sessions.json`; history cache lives in `~/.config/cch/cache.json`.
+
+## Local Verification
+
+```bash
+npm install
+npm run typecheck
+npm test
+npm run build
+node dist/cli.js --help
+```
+
+If you have both CLIs and local history available, smoke-check the provider paths:
+
+```bash
+node dist/cli.js ls --provider claude
+node dist/cli.js ls --provider codex
+node dist/cli.js ls --provider all
+```
 
 ## License
 

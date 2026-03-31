@@ -2,8 +2,14 @@ import { getConfig, setConfig } from "../config/index.js";
 
 export function configCommand(key?: string, value?: string): void {
   if (key && value) {
-    setConfig(key, value);
-    console.log(`Set ${key} = ${value}`);
+    try {
+      setConfig(key, value);
+      console.log(`Set ${key} = ${value}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(message);
+      process.exitCode = 1;
+    }
     return;
   }
 

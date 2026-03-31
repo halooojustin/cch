@@ -1,80 +1,67 @@
-import { readFileSync } from "node:fs";
-import { scanAllSessions, collectFileEntries, parseJsonl, type SessionInfo } from "../utils/jsonl.js";
-import { getCache, writeCache, getConfig } from "../config/index.js";
+import { getConfig } from "../config/index.js";
+import { getProviders } from "../providers/index.js";
+import type { HistorySession, ProviderSelection } from "../providers/interface.js";
 
-interface CacheEntry {
-  mtime: number;
-  sessionId: string;
-  project: string;
-  cwd: string;
-  gitBranch: string;
-  timestamp: string;
-  firstMsg: string;
-  userMsgs: string[];
-}
-
-export function loadSessions(limit?: number): SessionInfo[] {
+function resolveLoadArgs(
+  providerSelectionOrLimit?: ProviderSelection | number,
+  limit?: number,
+): { providerSelection: ProviderSelection; limit: number } {
   const config = getConfig();
-  const n = limit ?? config.historyLimit;
-  const cache = getCache() as Record<string, CacheEntry>;
-  // 传入 cache，让 scanAllSessions 跳过缓存命中文件的解析
-  const sessions = scanAllSessions(n, cache, config.excludeDirs);
-  const newCache: Record<string, CacheEntry> = {};
 
-  const result: SessionInfo[] = [];
-  for (const s of sessions) {
-    const cached = cache[s.filePath];
-    if (cached && cached.mtime === s.mtime) {
-      // 从缓存恢复完整数据
-      result.push({
-        sessionId: cached.sessionId,
-        filePath: s.filePath,
-        project: cached.project || "",
-        cwd: cached.cwd,
-        gitBranch: cached.gitBranch,
-        timestamp: cached.timestamp,
-        firstMsg: cached.firstMsg,
-        userMsgs: cached.userMsgs,
-        mtime: cached.mtime,
-      });
-      newCache[s.filePath] = cached;
-    } else {
-      result.push(s);
-      newCache[s.filePath] = {
-        mtime: s.mtime,
-        sessionId: s.sessionId,
-        project: s.project,
-        cwd: s.cwd,
-        gitBranch: s.gitBranch,
-        timestamp: s.timestamp,
-        firstMsg: s.firstMsg,
-        userMsgs: s.userMsgs,
-      };
-    }
+  if (typeof providerSelectionOrLimit === "number") {
+    return {
+      providerSelection: "claude",
+      limit: providerSelectionOrLimit,
+    };
   }
 
-  writeCache(newCache as unknown as Record<string, unknown>);
-  return result;
+  return {
+    providerSelection: providerSelectionOrLimit ?? "claude",
+    limit: limit ?? config.historyLimit,
+  };
 }
 
-export function searchSessions(keyword: string): SessionInfo[] {
-  const config = getConfig();
-  const matches: SessionInfo[] = [];
+function sortByMtimeDesc(sessions: HistorySession[]): HistorySession[] {
+  return [...sessions].sort((a, b) => b.mtime - a.mtime);
+}
+
+export function loadSessions(limit?: number): HistorySession[];
+export function loadSessions(providerSelection?: ProviderSelection, limit?: number, showSubagents?: boolean): HistorySession[];
+export function loadSessions(
+  providerSelectionOrLimit?: ProviderSelection | number,
+  limit?: number,
+  showSubagents: boolean = false,
+): HistorySession[] {
+  const { providerSelection, limit: resolvedLimit } = resolveLoadArgs(providerSelectionOrLimit, limit);
+  const providers = getProviders(providerSelection);
+  const sessions = providers.flatMap((provider) =>
+    provider.scanSessions({ limit: resolvedLimit, includeSubagents: showSubagents }),
+  );
+  return sortByMtimeDesc(sessions).slice(0, resolvedLimit);
+}
+
+function sessionSearchText(session: HistorySession): string {
+  return [
+    session.sessionId,
+    session.sourcePath,
+    session.cwd,
+    session.gitBranch,
+    session.timestamp,
+    session.firstMsg,
+    session.title ?? "",
+    ...session.userMsgs,
+  ]
+    .join("\n")
+    .toLowerCase();
+}
+
+export function searchSessions(keyword: string): HistorySession[];
+export function searchSessions(keyword: string, providerSelection?: ProviderSelection, showSubagents?: boolean): HistorySession[];
+export function searchSessions(
+  keyword: string,
+  providerSelection: ProviderSelection = "claude",
+  showSubagents: boolean = false,
+): HistorySession[] {
   const lowerKeyword = keyword.toLowerCase();
-
-  try {
-    const entries = collectFileEntries(config.excludeDirs);
-    for (const entry of entries) {
-      try {
-        const content = readFileSync(entry.filePath, "utf-8");
-        if (content.toLowerCase().includes(lowerKeyword)) {
-          const info = parseJsonl(entry.filePath, entry.mtime);
-          if (info) matches.push(info);
-        }
-      } catch { /* skip unreadable */ }
-    }
-  } catch { /* no projects dir */ }
-
-  matches.sort((a, b) => b.mtime - a.mtime);
-  return matches;
+  return sortByMtimeDesc(loadSessions(providerSelection, Number.MAX_SAFE_INTEGER, showSubagents).filter((session) => sessionSearchText(session).includes(lowerKeyword)));
 }
