@@ -1,16 +1,11 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
-import { parseJsonl, type SessionInfo } from "../utils/jsonl.js";
-import { claudeProvider } from "../providers/claude.js";
-import type { HistorySession } from "../providers/interface.js";
+import { readFileSync } from "node:fs";
+import { scanAllSessions, collectFileEntries, parseJsonl, type SessionInfo } from "../utils/jsonl.js";
 import { getCache, writeCache, getConfig } from "../config/index.js";
-
-const PROJECTS_DIR = join(homedir(), ".claude", "projects");
 
 interface CacheEntry {
   mtime: number;
   sessionId: string;
+  project: string;
   cwd: string;
   gitBranch: string;
   timestamp: string;
@@ -18,40 +13,37 @@ interface CacheEntry {
   userMsgs: string[];
 }
 
-function mergeCachedSession(session: HistorySession, cached: CacheEntry | undefined): HistorySession {
-  if (!cached) {
-    return session;
-  }
-
-  return {
-    ...session,
-    cwd: cached.cwd,
-    gitBranch: cached.gitBranch,
-    timestamp: cached.timestamp,
-    firstMsg: cached.firstMsg,
-    userMsgs: cached.userMsgs,
-    mtime: cached.mtime,
-  };
-}
-
-export function loadSessions(limit?: number): HistorySession[] {
+export function loadSessions(limit?: number): SessionInfo[] {
   const config = getConfig();
   const n = limit ?? config.historyLimit;
   const cache = getCache() as Record<string, CacheEntry>;
-  const sessions = claudeProvider.scanSessions(n);
+  // 传入 cache，让 scanAllSessions 跳过缓存命中文件的解析
+  const sessions = scanAllSessions(n, cache, config.excludeDirs);
   const newCache: Record<string, CacheEntry> = {};
 
-  const result: HistorySession[] = [];
+  const result: SessionInfo[] = [];
   for (const s of sessions) {
-    const cached = cache[s.sourcePath];
+    const cached = cache[s.filePath];
     if (cached && cached.mtime === s.mtime) {
-      result.push(mergeCachedSession(s, cached));
-      newCache[s.sourcePath] = cached;
+      // 从缓存恢复完整数据
+      result.push({
+        sessionId: cached.sessionId,
+        filePath: s.filePath,
+        project: cached.project || "",
+        cwd: cached.cwd,
+        gitBranch: cached.gitBranch,
+        timestamp: cached.timestamp,
+        firstMsg: cached.firstMsg,
+        userMsgs: cached.userMsgs,
+        mtime: cached.mtime,
+      });
+      newCache[s.filePath] = cached;
     } else {
       result.push(s);
-      newCache[s.sourcePath] = {
+      newCache[s.filePath] = {
         mtime: s.mtime,
         sessionId: s.sessionId,
+        project: s.project,
         cwd: s.cwd,
         gitBranch: s.gitBranch,
         timestamp: s.timestamp,
@@ -66,25 +58,20 @@ export function loadSessions(limit?: number): HistorySession[] {
 }
 
 export function searchSessions(keyword: string): SessionInfo[] {
+  const config = getConfig();
   const matches: SessionInfo[] = [];
+  const lowerKeyword = keyword.toLowerCase();
 
   try {
-    const dirs = readdirSync(PROJECTS_DIR, { withFileTypes: true });
-    for (const dir of dirs) {
-      if (!dir.isDirectory()) continue;
-      const projectPath = join(PROJECTS_DIR, dir.name);
-      const files = readdirSync(projectPath, { withFileTypes: true });
-      for (const file of files) {
-        if (!file.isFile() || !file.name.endsWith(".jsonl")) continue;
-        const filePath = join(projectPath, file.name);
-        try {
-          const content = readFileSync(filePath, "utf-8");
-          if (content.toLowerCase().includes(keyword.toLowerCase())) {
-            const info = parseJsonl(filePath);
-            if (info) matches.push(info);
-          }
-        } catch { /* skip unreadable */ }
-      }
+    const entries = collectFileEntries(config.excludeDirs);
+    for (const entry of entries) {
+      try {
+        const content = readFileSync(entry.filePath, "utf-8");
+        if (content.toLowerCase().includes(lowerKeyword)) {
+          const info = parseJsonl(entry.filePath, entry.mtime);
+          if (info) matches.push(info);
+        }
+      } catch { /* skip unreadable */ }
     }
   } catch { /* no projects dir */ }
 

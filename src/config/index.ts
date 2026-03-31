@@ -17,6 +17,7 @@ export interface CchConfig {
   codexArgs: string[];
   defaultProvider: ProviderName;
   historyLimit: number;
+  excludeDirs: string[];
 }
 
 export interface SessionMeta {
@@ -33,6 +34,7 @@ const DEFAULT_CONFIG: CchConfig = {
   codexArgs: ["--no-alt-screen"],
   defaultProvider: "claude",
   historyLimit: 100,
+  excludeDirs: ["claude-mem"],
 };
 
 function ensureDir(): void {
@@ -54,23 +56,29 @@ function writeJson(path: string, data: unknown): void {
   writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
 }
 
-export function getConfig(): CchConfig {
-  const config = readJson<Partial<CchConfig>>(CONFIG_FILE, {});
-  const defaultProvider =
-    typeof config.defaultProvider === "string" && isProviderName(config.defaultProvider)
-      ? config.defaultProvider
-      : DEFAULT_CONFIG.defaultProvider;
+// 进程内缓存：CLI 短生命周期，每个文件只需读一次
+let configCache: CchConfig | null = null;
 
-  return {
-    ...DEFAULT_CONFIG,
-    ...config,
-    defaultProvider,
-  };
+export function getConfig(): CchConfig {
+  if (!configCache) {
+    const config = readJson<Partial<CchConfig>>(CONFIG_FILE, {});
+    const defaultProvider =
+      typeof config.defaultProvider === "string" && isProviderName(config.defaultProvider)
+        ? config.defaultProvider
+        : DEFAULT_CONFIG.defaultProvider;
+
+    configCache = {
+      ...DEFAULT_CONFIG,
+      ...config,
+      defaultProvider,
+    };
+  }
+  return configCache;
 }
 
 export function setConfig(key: string, value: string): void {
   const config = readJson<Record<string, unknown>>(CONFIG_FILE, {});
-  if (key === "claudeArgs" || key === "codexArgs") {
+  if (key === "claudeArgs" || key === "codexArgs" || key === "excludeDirs") {
     config[key] = value.split(",").map((s) => s.trim());
   } else if (key === "historyLimit") {
     config[key] = parseInt(value, 10);
@@ -80,6 +88,7 @@ export function setConfig(key: string, value: string): void {
     config[key] = value;
   }
   writeJson(CONFIG_FILE, config);
+  configCache = null; // 写入后清除缓存
 }
 
 export function getSessionsMeta(): Record<string, SessionMeta> {
@@ -98,11 +107,19 @@ export function removeSessionMeta(name: string): void {
   writeJson(SESSIONS_FILE, sessions);
 }
 
+let cacheData: Record<string, unknown> | null = null;
+
 export function getCache(): Record<string, unknown> {
-  return readJson<Record<string, unknown>>(CACHE_FILE, {});
+  if (!cacheData) {
+    cacheData = readJson<Record<string, unknown>>(CACHE_FILE, {});
+  }
+  return cacheData;
 }
 
 export function writeCache(data: Record<string, unknown>): void {
+  // 简单比较：key 数量相同且引用未变则跳过
+  if (cacheData && JSON.stringify(cacheData) === JSON.stringify(data)) return;
+  cacheData = data;
   writeJson(CACHE_FILE, data);
 }
 

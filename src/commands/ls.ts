@@ -1,7 +1,7 @@
 import { loadSessions } from "../services/history.js";
 import { resumeInSession } from "../services/session.js";
-import { getSessionProjectPath } from "../utils/jsonl.js";
-import { interactiveSelect, padEndWidth } from "../utils/select.js";
+import { formatSessionLines } from "../ui/format.js";
+import { interactiveSelect } from "../ui/select.js";
 
 export async function lsCommand(n: number): Promise<void> {
   const sessions = loadSessions(n);
@@ -10,17 +10,12 @@ export async function lsCommand(n: number): Promise<void> {
     return;
   }
 
-  const items = sessions.map((s, i) => {
-    const num = String(i + 1).padStart(3);
-    const msg = s.firstMsg.replace(/\n/g, " ").slice(0, 28);
-    const project = getSessionProjectPath(s);
-    const ts = s.timestamp.slice(5, 16).replace("T", " ");
-    return { label: `${num} ${project.padEnd(20)} ${ts} ${msg}`, value: i };
-  });
+  const labels = formatSessionLines(sessions);
+  const items = labels.map((label, i) => ({ label, value: i }));
 
-  const result = await interactiveSelect(items);
-  if (result.action === "select" && result.value >= 0) {
-    const s = sessions[result.value];
-    await resumeInSession(s.sessionId, s.cwd, s.firstMsg.replace(/\n/g, " ").slice(0, 50));
+  const selected = await interactiveSelect(items, { hint: `↑↓/jk 导航 · 数字跳转 · Enter 恢复会话 · Esc 取消` });
+  if (selected >= 0) {
+    const s = sessions[selected];
+    await resumeInSession(s.sessionId, s.cwd);
   }
 }
