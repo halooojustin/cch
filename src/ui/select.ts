@@ -159,6 +159,7 @@ export function interactiveSelect(
       const now = Date.now();
       if (now - lastDKey < 500) {
         deleteTriggered = true;
+        (prompt as any).state = "cancel";
         (prompt as any).close();
         return;
       }
