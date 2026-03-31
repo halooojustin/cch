@@ -12,11 +12,12 @@ export interface HistorySession {
   userMsgs: string[];
   mtime: number;
   title?: string;
+  agentRole?: string;
 }
 
 export interface SessionProvider {
   name: ProviderName;
-  scanSessions(limit?: number): HistorySession[];
+  scanSessions(options?: { limit?: number; includeSubagents?: boolean }): HistorySession[];
   buildNewInvocation(description?: string): { command: string; args: string[] };
   buildResumeInvocation(sessionId: string): { command: string; args: string[] };
 }

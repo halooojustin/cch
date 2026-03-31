@@ -119,9 +119,10 @@ function buildTable(
 function claudeSearch(
   query: string,
   providerSelection: ProviderSelection = "claude",
+  showSubagents: boolean = false,
 ): HistorySession[] {
   const config = getConfig();
-  const sessions = loadSessions(providerSelection, config.historyLimit);
+  const sessions = loadSessions(providerSelection, config.historyLimit, showSubagents);
   if (!sessions.length) return [];
 
   const table = buildTable(sessions, providerSelection);
@@ -183,6 +184,7 @@ function resolveClaudeMemSessions(sessionIds: string[]): HistorySession[] {
 export function aiSearch(
   query: string,
   providerSelection: ProviderSelection = "claude",
+  showSubagents: boolean = false,
 ): HistorySession[] {
   if (providerSelection === "claude" && isClaudeMemInstalled()) {
     const results = memSearch(query);
@@ -194,5 +196,5 @@ export function aiSearch(
     }
   }
 
-  return claudeSearch(query, providerSelection);
+  return claudeSearch(query, providerSelection, showSubagents);
 }

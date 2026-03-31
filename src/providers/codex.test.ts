@@ -105,6 +105,110 @@ test("sqlite provider mapping ignores fabricated thread_name and derives firstMs
   });
 });
 
+test("sqlite reader SQL includes subagent filter by default", () => {
+  let executedSql = "";
+
+  readCodexThreadsFromSqlite(
+    CODEX_STATE_DB,
+    undefined,
+    ((command: string, args: readonly string[]) => {
+      executedSql = String(args[3]);
+      return "[]";
+    }) as never,
+    false,
+  );
+
+  assert.match(executedSql, /agent_role IS NULL OR agent_role = 'default'/);
+});
+
+test("sqlite reader SQL omits subagent filter when includeSubagents is true", () => {
+  let executedSql = "";
+
+  readCodexThreadsFromSqlite(
+    CODEX_STATE_DB,
+    undefined,
+    ((command: string, args: readonly string[]) => {
+      executedSql = String(args[3]);
+      return "[]";
+    }) as never,
+    true,
+  );
+
+  assert.doesNotMatch(executedSql, /agent_role IS NULL OR agent_role = 'default'/);
+});
+
+test("normalizeSqliteRow maps agent_role worker to agentRole field", () => {
+  const updatedAt = Math.floor(Date.UTC(2026, 2, 18, 6, 16, 10) / 1000);
+  const provider = createCodexProvider({
+    dbPath: CODEX_STATE_DB,
+    readSqliteRows: () =>
+      [
+        {
+          id: "worker-thread-id",
+          cwd: "/workspace",
+          git_branch: "main",
+          title: "Worker title",
+          first_user_message: "Worker task",
+          updated_at: updatedAt,
+          agent_role: "worker",
+        },
+      ] as any,
+  });
+
+  const sessions = provider.scanSessions({ includeSubagents: true });
+
+  assert.equal(sessions.length, 1);
+  assert.equal(sessions[0].agentRole, "worker");
+});
+
+test("normalizeSqliteRow does not set agentRole for NULL agent_role", () => {
+  const updatedAt = Math.floor(Date.UTC(2026, 2, 18, 6, 16, 10) / 1000);
+  const provider = createCodexProvider({
+    dbPath: CODEX_STATE_DB,
+    readSqliteRows: () =>
+      [
+        {
+          id: "main-thread-id",
+          cwd: "/workspace",
+          git_branch: "main",
+          title: "Main title",
+          first_user_message: "Main task",
+          updated_at: updatedAt,
+          agent_role: null,
+        },
+      ] as any,
+  });
+
+  const sessions = provider.scanSessions({ includeSubagents: true });
+
+  assert.equal(sessions.length, 1);
+  assert.equal(Object.hasOwn(sessions[0], "agentRole"), false);
+});
+
+test("normalizeSqliteRow does not set agentRole for default agent_role", () => {
+  const updatedAt = Math.floor(Date.UTC(2026, 2, 18, 6, 16, 10) / 1000);
+  const provider = createCodexProvider({
+    dbPath: CODEX_STATE_DB,
+    readSqliteRows: () =>
+      [
+        {
+          id: "default-thread-id",
+          cwd: "/workspace",
+          git_branch: "main",
+          title: "Default title",
+          first_user_message: "Default task",
+          updated_at: updatedAt,
+          agent_role: "default",
+        },
+      ] as any,
+  });
+
+  const sessions = provider.scanSessions({ includeSubagents: true });
+
+  assert.equal(sessions.length, 1);
+  assert.equal(Object.hasOwn(sessions[0], "agentRole"), false);
+});
+
 test("falls back to session_index.jsonl and preserves available metadata", () => {
   const root = mkdtempSync(join(tmpdir(), "cch-codex-"));
   tempRoots.push(root);

@@ -18,10 +18,11 @@ function noMatchMessage(provider: ProviderSelection): string {
 export async function defaultCommand(
   query: string,
   provider: ProviderSelection = "claude",
+  showSubagents: boolean = false,
 ): Promise<void> {
   console.log(`Searching for "${query}" ...\n`);
 
-  const matched = aiSearch(query, provider);
+  const matched = aiSearch(query, provider, showSubagents);
   if (!matched.length) {
     console.log(noMatchMessage(provider));
     return;
@@ -29,7 +30,7 @@ export async function defaultCommand(
 
   console.log(pc.dim(`Found ${matched.length} matching session(s):\n`));
 
-  const labels = formatSessionLines(matched, provider);
+  const labels = formatSessionLines(matched, provider, showSubagents);
   const items = labels.map((label, i) => ({ label, value: i }));
 
   const selected = await interactiveSelect(items, { hint: `↑↓/jk 导航 · 数字跳转 · Enter 恢复会话 · Esc 取消` });

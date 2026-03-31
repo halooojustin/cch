@@ -26,14 +26,17 @@ function sortByMtimeDesc(sessions: HistorySession[]): HistorySession[] {
 }
 
 export function loadSessions(limit?: number): HistorySession[];
-export function loadSessions(providerSelection?: ProviderSelection, limit?: number): HistorySession[];
+export function loadSessions(providerSelection?: ProviderSelection, limit?: number, showSubagents?: boolean): HistorySession[];
 export function loadSessions(
   providerSelectionOrLimit?: ProviderSelection | number,
   limit?: number,
+  showSubagents: boolean = false,
 ): HistorySession[] {
   const { providerSelection, limit: resolvedLimit } = resolveLoadArgs(providerSelectionOrLimit, limit);
   const providers = getProviders(providerSelection);
-  const sessions = providers.flatMap((provider) => provider.scanSessions(resolvedLimit));
+  const sessions = providers.flatMap((provider) =>
+    provider.scanSessions({ limit: resolvedLimit, includeSubagents: showSubagents }),
+  );
   return sortByMtimeDesc(sessions).slice(0, resolvedLimit);
 }
 
@@ -53,11 +56,12 @@ function sessionSearchText(session: HistorySession): string {
 }
 
 export function searchSessions(keyword: string): HistorySession[];
-export function searchSessions(keyword: string, providerSelection?: ProviderSelection): HistorySession[];
+export function searchSessions(keyword: string, providerSelection?: ProviderSelection, showSubagents?: boolean): HistorySession[];
 export function searchSessions(
   keyword: string,
   providerSelection: ProviderSelection = "claude",
+  showSubagents: boolean = false,
 ): HistorySession[] {
   const lowerKeyword = keyword.toLowerCase();
-  return sortByMtimeDesc(loadSessions(providerSelection, Number.MAX_SAFE_INTEGER).filter((session) => sessionSearchText(session).includes(lowerKeyword)));
+  return sortByMtimeDesc(loadSessions(providerSelection, Number.MAX_SAFE_INTEGER, showSubagents).filter((session) => sessionSearchText(session).includes(lowerKeyword)));
 }

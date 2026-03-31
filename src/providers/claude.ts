@@ -145,7 +145,9 @@ function buildResumeInvocation(sessionId: string): { command: string; args: stri
 
 export const claudeProvider: SessionProvider = {
   name: "claude",
-  scanSessions: scanClaudeSessions,
+  scanSessions(options?: { limit?: number; includeSubagents?: boolean }): HistorySession[] {
+    return scanClaudeSessions(options?.limit);
+  },
   buildNewInvocation,
   buildResumeInvocation,
 };

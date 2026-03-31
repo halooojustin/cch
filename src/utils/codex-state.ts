@@ -14,6 +14,7 @@ export interface CodexSqliteThreadRow {
   title?: string | null;
   first_user_message?: string | null;
   updated_at?: number | string | null;
+  agent_role?: string | null;
 }
 
 export interface CodexSessionIndexRow {
@@ -70,6 +71,12 @@ function normalizeSqliteRow(row: Partial<CodexSqliteThreadRow>, sourcePath: stri
   const { timestamp, mtime } = normalizeCodexTimestamp(row.updated_at);
   const title = normalizeText(row.title) || undefined;
 
+  const agentRoleValue = row.agent_role;
+  const agentRole =
+    typeof agentRoleValue === "string" && agentRoleValue !== "default"
+      ? agentRoleValue
+      : undefined;
+
   return {
     provider: "codex",
     sessionId: normalizeText(row.id),
@@ -81,6 +88,7 @@ function normalizeSqliteRow(row: Partial<CodexSqliteThreadRow>, sourcePath: stri
     userMsgs: normalizeUserMessage(row.first_user_message),
     mtime,
     title,
+    ...(agentRole !== undefined ? { agentRole } : {}),
   };
 }
 
@@ -122,7 +130,11 @@ export function readCodexThreadsFromSqlite(
   dbPath: string = CODEX_STATE_DB,
   limit?: number,
   exec: typeof execFileSync = execFileSync,
+  includeSubagents: boolean = false,
 ): CodexSqliteThreadRow[] {
+  const subagentFilter = includeSubagents
+    ? ""
+    : "AND (agent_role IS NULL OR agent_role = 'default')";
   const sql = [
     "select",
     "id,",
@@ -130,9 +142,10 @@ export function readCodexThreadsFromSqlite(
     "coalesce(git_branch, '') as git_branch,",
     "title,",
     "first_user_message,",
-    "updated_at",
+    "updated_at,",
+    "agent_role",
     "from threads",
-    "where archived = 0",
+    `where archived = 0 ${subagentFilter}`,
     "order by updated_at desc, id desc",
     typeof limit === "number" ? `limit ${Math.max(0, Math.trunc(limit))}` : "",
   ]

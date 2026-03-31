@@ -17,14 +17,15 @@ function noSessionsMessage(provider: ProviderSelection): string {
 export async function lsCommand(
   n: number,
   provider: ProviderSelection = "claude",
+  showSubagents: boolean = false,
 ): Promise<void> {
-  const sessions = loadSessions(provider, n);
+  const sessions = loadSessions(provider, n, showSubagents);
   if (!sessions.length) {
     console.log(noSessionsMessage(provider));
     return;
   }
 
-  const labels = formatSessionLines(sessions, provider);
+  const labels = formatSessionLines(sessions, provider, showSubagents);
   const items = labels.map((label, i) => ({ label, value: i }));
 
   const selected = await interactiveSelect(items, { hint: `↑↓/jk 导航 · 数字跳转 · Enter 恢复会话 · Esc 取消` });

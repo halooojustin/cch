@@ -8,6 +8,7 @@ test("bare ch parser accepts provider before natural-language query", () => {
   assert.deepEqual(parsed, {
     provider: "all",
     query: "cmux resume history",
+    showSubagents: false,
   });
 });
 
@@ -17,6 +18,7 @@ test("bare ch parser keeps Claude as the default provider when omitted", () => {
   assert.deepEqual(parsed, {
     provider: "claude",
     query: "login bug",
+    showSubagents: false,
   });
 });
 
@@ -26,5 +28,6 @@ test("bare ch parser accepts equals syntax for provider", () => {
   assert.deepEqual(parsed, {
     provider: "codex",
     query: "resume thread",
+    showSubagents: false,
   });
 });

@@ -74,20 +74,25 @@ function branchText(session: HistorySession): string {
   return `[${session.gitBranch.length > 15 ? `${session.gitBranch.slice(0, 14)}…` : session.gitBranch}]`;
 }
 
-function providerMarker(session: HistorySession): string {
-  return session.provider === "claude" ? "[cl]" : "[cx]";
+function providerMarker(session: HistorySession, showSubagents: boolean): string {
+  if (session.provider !== "codex") return "[cl]";
+  if (showSubagents && session.agentRole) {
+    return `[cx][${session.agentRole}]`;
+  }
+  return "[cx]";
 }
 
 export function formatSessionLines(
   sessions: HistorySession[],
   providerSelection: ProviderSelection = "claude",
+  showSubagents: boolean = false,
 ): string[] {
   if (!sessions.length) return [];
 
   const showProvider = providerSelection === "all";
   const rows = sessions.map((session, index) => ({
     num: String(index + 1).padStart(String(sessions.length).length),
-    provider: showProvider ? providerMarker(session) : "",
+    provider: showProvider ? providerMarker(session, showSubagents) : "",
     project: projectPath(session),
     ts: localTime(session.mtime || session.timestamp),
     branch: branchText(session),

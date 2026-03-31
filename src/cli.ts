@@ -25,18 +25,22 @@ program
   .description("List recent conversation history")
   .option("-n, --number <n>", "Number of sessions to show", "20")
   .option("--provider <provider>", "claude | codex | all", "claude")
+  .option("--show-subagents", "Show Codex subagent threads (worker/explorer)", false)
   .action(async (opts) => lsCommand(
     parseInt(opts.number, 10),
     parseProviderSelection(opts.provider, "claude"),
+    opts.showSubagents ?? false,
   ));
 
 program
   .command("search <keyword>")
   .description("Search sessions by keyword")
   .option("--provider <provider>", "claude | codex | all", "claude")
+  .option("--show-subagents", "Show Codex subagent threads (worker/explorer)", false)
   .action((keyword, opts) => searchCommand(
     keyword,
     parseProviderSelection(opts.provider, "claude"),
+    opts.showSubagents ?? false,
   ));
 
 program
@@ -104,12 +108,12 @@ if (args.length === 0) {
   }
 } else {
   const looksLikeBareQuery = !known.includes(args[0])
-    && (!args[0].startsWith("-") || args[0] === "--provider" || args[0].startsWith("--provider="));
+    && (!args[0].startsWith("-") || args[0] === "--provider" || args[0].startsWith("--provider=") || args[0] === "--show-subagents");
 
   if (looksLikeBareQuery) {
     try {
       const parsed = parseBareQueryArgs(args, "claude");
-      await defaultCommand(parsed.query, parsed.provider);
+      await defaultCommand(parsed.query, parsed.provider, parsed.showSubagents);
     } catch (error) {
       if ((error as Error).message === "Missing query") {
         // `ch --provider codex` with no query → show history list for that provider

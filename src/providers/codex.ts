@@ -14,18 +14,23 @@ import type { HistorySession, SessionProvider } from "./interface.js";
 export interface CodexProviderOptions {
   dbPath?: string;
   indexPath?: string;
-  readSqliteRows?: (dbPath: string, limit?: number) => CodexSqliteThreadRow[];
+  readSqliteRows?: (dbPath: string, limit?: number, includeSubagents?: boolean) => CodexSqliteThreadRow[];
   readIndexRows?: (indexPath: string) => CodexSessionIndexRow[];
 }
 
-function loadSessions(options: CodexProviderOptions, limit?: number): HistorySession[] {
+function loadSessions(
+  options: CodexProviderOptions,
+  limit?: number,
+  includeSubagents: boolean = false,
+): HistorySession[] {
   const dbPath = options.dbPath ?? CODEX_STATE_DB;
   const indexPath = options.indexPath ?? CODEX_SESSION_INDEX;
-  const readSqliteRows = options.readSqliteRows ?? ((path: string, max?: number) => readCodexThreadsFromSqlite(path, max));
+  const readSqliteRows = options.readSqliteRows ??
+    ((path: string, max?: number, incSub?: boolean) => readCodexThreadsFromSqlite(path, max, undefined, incSub));
   const readIndexRows = options.readIndexRows ?? ((path: string) => readCodexThreadsFromIndex(path));
 
   try {
-    return readSqliteRows(dbPath, limit)
+    return readSqliteRows(dbPath, limit, includeSubagents)
       .slice(0, typeof limit === "number" ? limit : undefined)
       .map((row) => mapCodexSqliteThreadRowToHistorySession(row, dbPath));
   } catch {
@@ -42,8 +47,8 @@ function loadSessions(options: CodexProviderOptions, limit?: number): HistorySes
 export function createCodexProvider(options: CodexProviderOptions = {}): SessionProvider {
   return {
     name: "codex",
-    scanSessions(limit?: number): HistorySession[] {
-      return loadSessions(options, limit);
+    scanSessions(scanOptions?: { limit?: number; includeSubagents?: boolean }): HistorySession[] {
+      return loadSessions(options, scanOptions?.limit, scanOptions?.includeSubagents ?? false);
     },
     buildNewInvocation(): { command: string; args: string[] } {
       const config = getConfig();

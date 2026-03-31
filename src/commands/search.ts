@@ -18,9 +18,10 @@ function noSessionsMessage(provider: ProviderSelection): string {
 export async function searchCommand(
   keyword: string,
   provider: ProviderSelection = "claude",
+  showSubagents: boolean = false,
 ): Promise<void> {
   console.log(`Searching "${keyword}" ...`);
-  const matches = searchSessions(keyword, provider);
+  const matches = searchSessions(keyword, provider, showSubagents);
 
   if (!matches.length) {
     console.log(noSessionsMessage(provider));
@@ -30,7 +31,7 @@ export async function searchCommand(
   console.log(pc.dim(`\nFound ${matches.length} sessions:\n`));
 
   const top = matches.slice(0, 50);
-  const labels = formatSessionLines(top, provider);
+  const labels = formatSessionLines(top, provider, showSubagents);
   const items = labels.map((label, i) => ({ label, value: i }));
 
   const selected = await interactiveSelect(items, { hint: `↑↓/jk 导航 · 数字跳转 · Enter 恢复会话 · Esc 取消` });
