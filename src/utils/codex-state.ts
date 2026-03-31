@@ -134,7 +134,12 @@ export function readCodexThreadsFromSqlite(
 ): CodexSqliteThreadRow[] {
   const subagentFilter = includeSubagents
     ? ""
-    : "AND agent_role IS NULL";
+    : [
+        "AND agent_role IS NULL",
+        "AND agent_nickname IS NULL",
+        "AND (source IS NULL OR source NOT LIKE '{\"subagent\":%')",
+        "AND id NOT IN (SELECT child_thread_id FROM thread_spawn_edges)",
+      ].join(" ");
   const sql = [
     "select",
     "id,",
