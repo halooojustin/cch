@@ -1,8 +1,8 @@
-# cch — Claude Code History
+# cch — Claude / Codex 对话历史管理
 
-为 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 打造的 AI 对话历史管理工具。
+为 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 和 Codex 打造的 AI 对话历史管理工具。
 
-用自然语言找到任何一个过去的对话，在 Zellij 或 tmux 里恢复它——跨所有项目。
+用自然语言找到过去的对话，跨项目浏览历史，并在 Zellij 或 tmux 里恢复它。
 
 ## 痛点
 
@@ -38,7 +38,7 @@ cp -r $(npm root -g)/cch/skill ~/.claude/skills/cch
 
 ## 使用方法
 
-### 自然语言搜索（核心功能）
+### 自然语言搜索
 
 随便描述你记得的内容，AI 帮你找到对应的对话。
 
@@ -46,29 +46,39 @@ cp -r $(npm root -g)/cch/skill ~/.claude/skills/cch
 ch 上次帮我调试 iOS 的那个对话
 ch 帮我部署虾的那几个
 ch demo 钱包重构的那个
+ch --provider codex 那个讨论 cmux resume 的对话
+ch --provider all 讨论认证跳转的那个会话
 ```
 
-`ch` 会把你的描述和会话列表一起发给 `claude -p`（优先使用 Haiku 模型加速，失败自动回退到默认模型），返回最匹配的结果。选中后直接在终端复用器里恢复。
+Claude 作用域下，`ch` 会优先使用 `claude-mem` 做语义搜索；找不到时再回退到 Claude CLI 排序。Codex 和 `all` 模式则走 provider-aware 的候选会话表。
 
 ### 命令一览
 
+```bash
+ch <描述>                                自然语言搜索（默认搜 Claude）
+ch --provider codex <描述>               只搜 Codex 历史
+ch --provider all <描述>                 跨 Claude + Codex 搜索
+ch ls [-n 20] [--provider <p>]           浏览历史并恢复
+ch search <关键词> [--provider <p>]      精确关键词搜索
+ch new [描述] [--provider <p>]           新建 Claude 或 Codex 会话
+ch new -f [描述] [--provider <p>]        强制新建（先杀旧会话）
+ch ps                                    查看活跃的终端复用器会话
+ch attach <会话名>                       连接到活跃会话
+ch kill <会话名>                         关闭会话
+ch resume <session-id> [--provider <p>]  通过 session ID 恢复
+ch config                                查看配置
+ch setup                                 安装 shell 别名
 ```
-ch <描述>                     自然语言搜索（默认行为）
-ch list [-n 20]               列出最近的历史会话（交互式选择器）
-ch search <关键词>            精确关键词搜索对话内容
-ch new [描述]                 在当前目录新建 Claude 会话
-ch new -f [描述]              强制新建（先关闭同名旧会话）
-ch ls                         查看活跃的终端复用器会话（交互式选择器）
-ch attach <会话名>            连接到一个活跃会话
-ch kill <会话名>              关闭一个会话
-ch resume <session-id>        通过 session ID 恢复
-ch config                     查看配置
-ch config set <key> <value>   修改配置
-```
+
+`--provider` 可取：
+
+- `claude`
+- `codex`
+- `all`
 
 ### 交互式选择器
 
-`ch list` 和 `ch ls` 都支持交互式选择：
+`ch ls`、`ch search` 和自然语言搜索结果都支持交互式选择：
 
 - **上下箭头** 或 **j/k** — 导航选择
 - **数字键** — 输入数字（如 `12`）然后 **Enter** 直接跳转
@@ -82,7 +92,7 @@ ch config set <key> <value>   修改配置
 **第一级 — 活跃会话：** 会话还在终端复用器里运行？
 
 ```bash
-ch ls                    # 交互式列表 — 选一个直接连接
+ch ps                    # 交互式列表 — 选一个直接连接
 ```
 
 **第二级 — 历史恢复：** 会话已结束，想重新捡起来？
@@ -90,7 +100,9 @@ ch ls                    # 交互式列表 — 选一个直接连接
 ```bash
 ch 那个讨论登录bug的对话     # AI 帮你找
 # 或者
-ch list                      # 交互式列表 — 选一个恢复
+ch ls                       # 交互式列表 — 选一个恢复
+ch ls --provider codex      # 只看 Codex 历史
+ch ls --provider all        # 看合并后的历史
 ```
 
 两种方式都会在 Zellij/tmux 会话里打开，通过登录 shell（`zsh -lc`）启动以继承完整环境和认证信息。随时可以断开和重连。
@@ -101,6 +113,9 @@ ch list                      # 交互式列表 — 选一个恢复
 # 在当前项目启动新的 Claude 会话
 ch new
 
+# 启动新的 Codex 会话
+ch new --provider codex
+
 # 带描述（会显示在 ch ls 和 Zellij tab 名中）
 ch new "fix authentication bug"
 ch new 修复登录bug              # 支持中文描述
@@ -108,8 +123,8 @@ ch new 修复登录bug              # 支持中文描述
 # 强制重启（先关闭旧会话）
 ch new -f "重新开始搞认证"
 
-# 查看正在运行的会话（按创建时间倒序，最新的在最上面）
-ch ls
+# 查看当前活跃的复用器会话
+ch ps
 
 # 清理
 ch kill ch-myproject-fix-auth
@@ -132,7 +147,11 @@ ch kill ch-myproject-fix-auth
   "backend": "auto",
   "claudeCommand": "claude",
   "claudeArgs": ["--dangerously-skip-permissions"],
-  "historyLimit": 100
+  "codexCommand": "codex",
+  "codexArgs": ["--no-alt-screen"],
+  "defaultProvider": "claude",
+  "historyLimit": 100,
+  "excludeDirs": ["claude-mem"]
 }
 ```
 
@@ -141,11 +160,16 @@ ch kill ch-myproject-fix-auth
 | `backend` | `"auto"` | `"auto"`、`"zellij"` 或 `"tmux"` |
 | `claudeCommand` | `"claude"` | Claude CLI 路径 |
 | `claudeArgs` | `["--dangerously-skip-permissions"]` | 新建会话和恢复会话时的默认参数 |
+| `codexCommand` | `"codex"` | Codex CLI 路径 |
+| `codexArgs` | `["--no-alt-screen"]` | Codex 新建/恢复会话时的默认参数 |
+| `defaultProvider` | `"claude"` | 持久化的默认 provider 值 |
 | `historyLimit` | `100` | AI 搜索时加载的最大会话数 |
+| `excludeDirs` | `["claude-mem"]` | Claude JSONL 扫描时跳过的目录 |
 
 ```bash
 ch config set backend tmux
 ch config set historyLimit 200
+ch config set codexArgs --no-alt-screen,--model,o3
 ```
 
 ## 推荐别名
@@ -156,6 +180,7 @@ ch config set historyLimit 200
 alias cn="ch new"
 alias cnf="ch new -f"
 alias cls="ch ls"
+alias cps="ch ps"
 alias chs="ch search"
 ```
 
@@ -165,21 +190,40 @@ alias chs="ch search"
 cn fix login bug        # 带描述新建会话
 cn 修复登录bug           # 支持中文描述
 cnf                     # 强制重启当前项目会话
-cls                     # 交互式查看活跃会话
+cls                     # 交互式浏览历史
+cps                     # 交互式查看活跃会话
 chs 龙虾                # 关键词搜索
 ```
 
 ## 工作原理
 
-1. **历史扫描** — 读取 `~/.claude/projects/**/*.jsonl`，提取会话元信息和用户的前几条消息。按文件修改时间缓存到 `~/.config/cch/cache.json`，后续查询秒开。
+1. **Provider-aware 历史层** — Claude 历史来自 `~/.claude/projects/**/*.jsonl`；Codex 历史来自 `~/.codex/state_5.sqlite`，不可用时回退到 `session_index.jsonl`。两者都会归一化成统一的 `HistorySession`。
 
-2. **AI 搜索** — 构建所有会话的文本列表，连同你的自然语言描述一起发给 `claude -p`（优先使用 Haiku 模型加速，自动回退到默认模型）。解析返回的编号找到匹配的会话。
+2. **Claude 快速路径** — 在 Claude 作用域下，`cch` 会优先用 `claude-mem` 做语义搜索，找不到再回退到 Claude CLI 排序。
 
-3. **终端复用器集成** — 在 Zellij 或 tmux 中创建命名会话。Zellij 通过生成临时 KDL 布局/配置文件，使用 `zsh -lc` 启动以确保完整的 shell 环境。tmux 使用标准的 `new-session`/`attach` 命令。自动检测可用的复用器（优先 Zellij）。
+3. **混合作用域搜索** — 在 Codex 和 `all` 模式下，`cch` 会构建 provider-aware 会话表，再交给 Claude CLI 排序。
 
-4. **会话命名** — 格式为 `ch-<目录名>[-<描述或哈希>]`。英文描述会 slug 化拼入名称；中文描述使用 MD5 哈希前缀。`ch-` 前缀方便在 `zellij ls` / `tmux ls` 中识别。
+4. **终端复用器集成** — 新建和恢复都会进 Zellij/tmux。Claude 恢复使用 `--resume <id>`；Codex 恢复使用 `resume <id>`。
 
-5. **会话元数据** — 描述、工作目录和创建时间持久化存储在 `~/.config/cch/sessions.json`，重启不丢失。`ch ls` 用它来显示描述和按创建时间排序。
+5. **元数据和缓存** — 会话描述保存在 `~/.config/cch/sessions.json`，历史缓存保存在 `~/.config/cch/cache.json`。
+
+## 本地验证
+
+```bash
+npm install
+npm run typecheck
+npm test
+npm run build
+node dist/cli.js --help
+```
+
+如果机器上同时有 Claude / Codex 和本地历史，可再手动 smoke-check：
+
+```bash
+node dist/cli.js ls --provider claude
+node dist/cli.js ls --provider codex
+node dist/cli.js ls --provider all
+```
 
 ## 许可证
 
