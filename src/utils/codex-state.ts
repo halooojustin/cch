@@ -73,7 +73,7 @@ function normalizeSqliteRow(row: Partial<CodexSqliteThreadRow>, sourcePath: stri
 
   const agentRoleValue = row.agent_role;
   const agentRole =
-    typeof agentRoleValue === "string" && agentRoleValue !== "default"
+    typeof agentRoleValue === "string" && agentRoleValue.length > 0
       ? agentRoleValue
       : undefined;
 
@@ -134,7 +134,7 @@ export function readCodexThreadsFromSqlite(
 ): CodexSqliteThreadRow[] {
   const subagentFilter = includeSubagents
     ? ""
-    : "AND (agent_role IS NULL OR agent_role = 'default')";
+    : "AND agent_role IS NULL";
   const sql = [
     "select",
     "id,",

@@ -118,7 +118,7 @@ test("sqlite reader SQL includes subagent filter by default", () => {
     false,
   );
 
-  assert.match(executedSql, /agent_role IS NULL OR agent_role = 'default'/);
+  assert.match(executedSql, /agent_role IS NULL/);
 });
 
 test("sqlite reader SQL omits subagent filter when includeSubagents is true", () => {
@@ -134,7 +134,7 @@ test("sqlite reader SQL omits subagent filter when includeSubagents is true", ()
     true,
   );
 
-  assert.doesNotMatch(executedSql, /agent_role IS NULL OR agent_role = 'default'/);
+  assert.doesNotMatch(executedSql, /agent_role IS NULL/);
 });
 
 test("normalizeSqliteRow maps agent_role worker to agentRole field", () => {
@@ -185,7 +185,7 @@ test("normalizeSqliteRow does not set agentRole for NULL agent_role", () => {
   assert.equal(Object.hasOwn(sessions[0], "agentRole"), false);
 });
 
-test("normalizeSqliteRow does not set agentRole for default agent_role", () => {
+test("normalizeSqliteRow sets agentRole for default agent_role (default is a subagent role)", () => {
   const updatedAt = Math.floor(Date.UTC(2026, 2, 18, 6, 16, 10) / 1000);
   const provider = createCodexProvider({
     dbPath: CODEX_STATE_DB,
@@ -206,7 +206,7 @@ test("normalizeSqliteRow does not set agentRole for default agent_role", () => {
   const sessions = provider.scanSessions({ includeSubagents: true });
 
   assert.equal(sessions.length, 1);
-  assert.equal(Object.hasOwn(sessions[0], "agentRole"), false);
+  assert.equal(sessions[0].agentRole, "default");
 });
 
 test("falls back to session_index.jsonl and preserves available metadata", () => {
