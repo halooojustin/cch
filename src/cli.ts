@@ -111,8 +111,15 @@ if (args.length === 0) {
       const parsed = parseBareQueryArgs(args, "claude");
       await defaultCommand(parsed.query, parsed.provider);
     } catch (error) {
-      console.error((error as Error).message);
-      process.exitCode = 1;
+      if ((error as Error).message === "Missing query") {
+        // `ch --provider codex` with no query → show history list for that provider
+        const providerArg = args[1] ?? "claude";
+        const provider = parseProviderSelection(providerArg, "claude");
+        await lsCommand(20, provider);
+      } else {
+        console.error((error as Error).message);
+        process.exitCode = 1;
+      }
     }
   } else {
     await program.parseAsync();
