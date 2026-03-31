@@ -2,18 +2,20 @@ import { getConfig } from "../config/index.js";
 import {
   CODEX_SESSION_INDEX,
   CODEX_STATE_DB,
-  mapCodexThreadRowToHistorySession,
+  mapCodexIndexThreadRowToHistorySession,
+  mapCodexSqliteThreadRowToHistorySession,
   readCodexThreadsFromIndex,
   readCodexThreadsFromSqlite,
-  type CodexThreadRow,
+  type CodexSessionIndexRow,
+  type CodexSqliteThreadRow,
 } from "../utils/codex-state.js";
 import type { HistorySession, SessionProvider } from "./interface.js";
 
 export interface CodexProviderOptions {
   dbPath?: string;
   indexPath?: string;
-  readSqliteRows?: (dbPath: string, limit?: number) => CodexThreadRow[];
-  readIndexRows?: (indexPath: string) => CodexThreadRow[];
+  readSqliteRows?: (dbPath: string, limit?: number) => CodexSqliteThreadRow[];
+  readIndexRows?: (indexPath: string) => CodexSessionIndexRow[];
 }
 
 function loadSessions(options: CodexProviderOptions, limit?: number): HistorySession[] {
@@ -25,12 +27,12 @@ function loadSessions(options: CodexProviderOptions, limit?: number): HistorySes
   try {
     return readSqliteRows(dbPath, limit)
       .slice(0, typeof limit === "number" ? limit : undefined)
-      .map((row) => mapCodexThreadRowToHistorySession(row, dbPath));
+      .map((row) => mapCodexSqliteThreadRowToHistorySession(row, dbPath));
   } catch {
     try {
       return readIndexRows(indexPath)
         .slice(0, typeof limit === "number" ? limit : undefined)
-        .map((row) => mapCodexThreadRowToHistorySession(row, indexPath));
+        .map((row) => mapCodexIndexThreadRowToHistorySession(row, indexPath));
     } catch {
       return [];
     }
@@ -61,4 +63,3 @@ export function createCodexProvider(options: CodexProviderOptions = {}): Session
 }
 
 export const codexProvider = createCodexProvider();
-

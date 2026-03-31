@@ -134,7 +134,7 @@ export function scanAllSessions(limit: number, cache?: Record<string, { mtime: n
     const sessions: SessionInfo[] = [];
     for (const entry of topEntries) {
       const cached = cache?.[entry.filePath];
-      if (cached && cached.mtime === entry.mtime) {
+      if (cached && Math.abs(cached.mtime - entry.mtime) <= 1) {
         // 缓存命中，跳过文件读取，由调用方填充完整数据
         sessions.push({ filePath: entry.filePath, mtime: entry.mtime } as SessionInfo);
       } else {

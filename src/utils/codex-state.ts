@@ -7,13 +7,22 @@ import type { HistorySession } from "../providers/interface.js";
 export const CODEX_STATE_DB = join(homedir(), ".codex", "state_5.sqlite");
 export const CODEX_SESSION_INDEX = join(homedir(), ".codex", "session_index.jsonl");
 
-export interface CodexThreadRow {
+export interface CodexSqliteThreadRow {
   id: string;
   cwd?: string;
   git_branch?: string | null;
   title?: string | null;
   first_user_message?: string | null;
+  updated_at?: number | string | null;
+}
+
+export interface CodexSessionIndexRow {
+  id: string;
   thread_name?: string | null;
+  cwd?: string | null;
+  git_branch?: string | null;
+  title?: string | null;
+  first_user_message?: string | null;
   updated_at?: number | string | null;
 }
 
@@ -56,10 +65,10 @@ function normalizeUserMessage(value: unknown): string[] {
   return text ? [text] : [];
 }
 
-function normalizeRow(row: Partial<CodexThreadRow>, sourcePath: string): HistorySession {
-  const firstMsg = normalizeText(row.first_user_message) || normalizeText(row.title) || normalizeText(row.thread_name);
+function normalizeSqliteRow(row: Partial<CodexSqliteThreadRow>, sourcePath: string): HistorySession {
+  const firstMsg = normalizeText(row.first_user_message) || normalizeText(row.title);
   const { timestamp, mtime } = normalizeCodexTimestamp(row.updated_at);
-  const title = normalizeText(row.title) || normalizeText(row.thread_name) || undefined;
+  const title = normalizeText(row.title) || undefined;
 
   return {
     provider: "codex",
@@ -75,25 +84,51 @@ function normalizeRow(row: Partial<CodexThreadRow>, sourcePath: string): History
   };
 }
 
-export function mapCodexThreadRowToHistorySession(
-  row: Partial<CodexThreadRow>,
+function normalizeIndexRow(row: Partial<CodexSessionIndexRow>, sourcePath: string): HistorySession {
+  const threadName = normalizeText(row.thread_name);
+  const firstMsg = normalizeText(row.first_user_message) || normalizeText(row.title) || threadName;
+  const title = normalizeText(row.title) || threadName || undefined;
+  const { timestamp, mtime } = normalizeCodexTimestamp(row.updated_at);
+
+  return {
+    provider: "codex",
+    sessionId: normalizeText(row.id),
+    sourcePath,
+    cwd: normalizeText(row.cwd),
+    gitBranch: normalizeText(row.git_branch),
+    timestamp,
+    firstMsg,
+    userMsgs: [],
+    mtime,
+    title,
+  };
+}
+
+export function mapCodexSqliteThreadRowToHistorySession(
+  row: Partial<CodexSqliteThreadRow>,
   sourcePath: string,
 ): HistorySession {
-  return normalizeRow(row, sourcePath);
+  return normalizeSqliteRow(row, sourcePath);
+}
+
+export function mapCodexIndexThreadRowToHistorySession(
+  row: Partial<CodexSessionIndexRow>,
+  sourcePath: string,
+): HistorySession {
+  return normalizeIndexRow(row, sourcePath);
 }
 
 export function readCodexThreadsFromSqlite(
   dbPath: string = CODEX_STATE_DB,
   limit?: number,
   exec: typeof execFileSync = execFileSync,
-): CodexThreadRow[] {
+): CodexSqliteThreadRow[] {
   const sql = [
     "select",
     "id,",
     "cwd,",
     "coalesce(git_branch, '') as git_branch,",
     "title,",
-    "title as thread_name,",
     "first_user_message,",
     "updated_at",
     "from threads",
@@ -114,14 +149,14 @@ export function readCodexThreadsFromSqlite(
     throw new Error("Unexpected Codex sqlite output");
   }
 
-  return parsed as CodexThreadRow[];
+  return parsed as CodexSqliteThreadRow[];
 }
 
-export function readCodexThreadsFromIndex(indexPath: string = CODEX_SESSION_INDEX): CodexThreadRow[] {
+export function readCodexThreadsFromIndex(indexPath: string = CODEX_SESSION_INDEX): CodexSessionIndexRow[] {
   try {
     const raw = readFileSync(indexPath, "utf-8");
     const indexMtime = statSync(indexPath).mtimeMs;
-    const rows: CodexThreadRow[] = [];
+    const rows: CodexSessionIndexRow[] = [];
 
     for (const line of raw.split("\n")) {
       if (!line.trim()) continue;
@@ -139,11 +174,11 @@ export function readCodexThreadsFromIndex(indexPath: string = CODEX_SESSION_INDE
 
       rows.push({
         id,
-        cwd: normalizeText(record.cwd),
-        git_branch: normalizeText(record.git_branch),
+        thread_name: normalizeText(record.thread_name) || undefined,
+        cwd: normalizeText(record.cwd) || undefined,
+        git_branch: normalizeText(record.git_branch) || undefined,
         title: normalizeText(record.title) || undefined,
         first_user_message: normalizeText(record.first_user_message) || undefined,
-        thread_name: normalizeText(record.thread_name) || undefined,
         updated_at:
           typeof record.updated_at === "string" || typeof record.updated_at === "number"
             ? record.updated_at

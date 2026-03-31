@@ -22,6 +22,7 @@ test("getConfig returns the current Claude-first defaults", async () => {
       codexArgs: ["--no-alt-screen"],
       defaultProvider: "claude",
       historyLimit: 100,
+      excludeDirs: ["claude-mem"],
     });
   } finally {
     if (originalHome === undefined) {
