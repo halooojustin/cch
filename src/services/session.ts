@@ -70,12 +70,10 @@ export async function killSession(name: string): Promise<void> {
   removeSessionMeta(name);
 }
 
-export async function resumeDirectly(sessionId: string, cwd: string): void {
+export async function resumeDirectly(sessionId: string, cwd: string): Promise<void> {
+  const { execFileSync } = await import("node:child_process");
   const config = getConfig();
-  process.chdir(cwd);
-  process.execArgv;
-  const { execSync } = await import("node:child_process");
-  execSync(`${config.claudeCommand} ${config.claudeArgs.join(" ")} --resume ${sessionId}`, {
+  execFileSync(config.claudeCommand, [...config.claudeArgs, "--resume", sessionId], {
     stdio: "inherit",
     cwd,
   });
