@@ -154,11 +154,16 @@ export function interactiveSelect(
         inputBuf = inputBuf.slice(0, -1);
         (prompt as any).render();
       }
-    } else if (char === "d" && useDelete) {
+    } else if (char === "d" && useDelete && !inputBuf) {
       // dd 双击删除
       const now = Date.now();
       if (now - lastDKey < 500) {
         deleteTriggered = true;
+        // Trigger submit so the promise resolves normally
+        (prompt as any).state = "submit";
+        (prompt as any).value = items[(prompt as any).cursor]?.value;
+        (prompt as any).emit("finalize");
+        (prompt as any).render();
         (prompt as any).close();
         return;
       }
