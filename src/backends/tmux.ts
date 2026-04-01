@@ -35,8 +35,6 @@ export class TmuxBackend implements SessionBackend {
   }
 
   createSession(opts: CreateSessionOpts): void {
-    const cmd = [opts.command, ...opts.args].join(" ");
-
     try {
       execFileSync("tmux", ["has-session", "-t", opts.name], { stdio: "pipe" });
       execFileSync("tmux", ["attach", "-t", opts.name], { stdio: "inherit" });
@@ -45,9 +43,21 @@ export class TmuxBackend implements SessionBackend {
       // session doesn't exist, create it
     }
 
-    execFileSync("tmux", ["new-session", "-d", "-s", opts.name, "-c", opts.cwd, cmd], {
+    // Create session with a plain shell, then send the full command via send-keys
+    // This avoids shell quoting issues with JSON in --settings
+    execFileSync("tmux", ["new-session", "-d", "-s", opts.name, "-c", opts.cwd], {
       stdio: "pipe",
     });
+
+    // Build properly escaped command
+    const parts = [opts.command, ...opts.args].map((a) => {
+      if (/[{}"'\s]/.test(a)) return `'${a.replace(/'/g, "'\\''")}'`;
+      return a;
+    });
+    execFileSync("tmux", ["send-keys", "-t", opts.name, parts.join(" "), "Enter"], {
+      stdio: "pipe",
+    });
+
     execFileSync("tmux", ["attach", "-t", opts.name], { stdio: "inherit" });
   }
 
