@@ -8,7 +8,7 @@ export interface SelectItem {
 
 export interface SelectResult {
   value: number;
-  action: "select" | "delete" | "cancel";
+  action: "select" | "delete" | "fork" | "cancel";
 }
 
 const S_BAR = "│";
@@ -65,17 +65,18 @@ function getWindow(cursor: number, total: number, maxItems: number): { start: nu
  */
 export function interactiveSelect(
   items: SelectItem[],
-  opts: { hint?: string; maxItems?: number; initialCursor?: number; deleteKey: true },
+  opts: { hint?: string; maxItems?: number; initialCursor?: number; deleteKey?: boolean; forkKey?: boolean } & ({ deleteKey: true } | { forkKey: true }),
 ): Promise<SelectResult>;
 export function interactiveSelect(
   items: SelectItem[],
-  opts?: { hint?: string; maxItems?: number; initialCursor?: number; deleteKey?: false },
+  opts?: { hint?: string; maxItems?: number; initialCursor?: number; deleteKey?: false; forkKey?: false },
 ): Promise<number>;
 export function interactiveSelect(
   items: SelectItem[],
-  opts: { hint?: string; maxItems?: number; initialCursor?: number; deleteKey?: boolean } = {},
+  opts: { hint?: string; maxItems?: number; initialCursor?: number; deleteKey?: boolean; forkKey?: boolean } = {},
 ): Promise<number | SelectResult> {
   const useDelete = opts.deleteKey ?? false;
+  const useFork = opts.forkKey ?? false;
   if (!process.stdin.isTTY) return Promise.resolve(useDelete ? { value: -1, action: "cancel" as const } : -1);
   if (!items.length) return Promise.resolve(useDelete ? { value: -1, action: "cancel" as const } : -1);
 
@@ -84,6 +85,7 @@ export function interactiveSelect(
   let inputBuf = "";
   let lastDKey = 0; // dd 双击检测时间戳
   let deleteTriggered = false;
+  let forkTriggered = false;
 
   const options = items.map((item) => ({
     value: item.value,
@@ -127,6 +129,11 @@ export function interactiveSelect(
           const name = selected ? truncate(selected.label.trim(), cols - 10) : "";
           return `${pc.gray(S_BAR_END)}  ${pc.red("✕")} ${pc.strikethrough(pc.dim(name))}`;
         }
+        if (forkTriggered) {
+          const selected = items[this.cursor];
+          const name = selected ? truncate(selected.label.trim(), cols - 10) : "";
+          return `${pc.gray(S_BAR_END)}  ${pc.cyan("⑂")} ${pc.cyan(name)}`;
+        }
         const selected = items[this.cursor];
         const msg = selected ? truncate(selected.label.trim(), cols - 6) : "";
         return `${pc.gray(S_BAR_END)}  ${pc.dim(msg)}`;
@@ -159,6 +166,14 @@ export function interactiveSelect(
         inputBuf = inputBuf.slice(0, -1);
         (prompt as any).render();
       }
+    } else if (char === "f" && useFork && !inputBuf) {
+      forkTriggered = true;
+      (prompt as any).state = "submit";
+      (prompt as any).value = items[(prompt as any).cursor]?.value;
+      (prompt as any).emit("finalize");
+      (prompt as any).render();
+      (prompt as any).close();
+      return;
     } else if (char === "d" && useDelete && !inputBuf) {
       // dd 双击删除
       const now = Date.now();
@@ -192,9 +207,12 @@ export function interactiveSelect(
   });
 
   return prompt.prompt().then((result) => {
-    if (useDelete) {
+    if (useDelete || useFork) {
       if (deleteTriggered) {
         return { value: (prompt as any).cursor, action: "delete" as const };
+      }
+      if (forkTriggered) {
+        return { value: (prompt as any).cursor, action: "fork" as const };
       }
       if (isCancel(result) || result === undefined) {
         return { value: -1, action: "cancel" as const };
