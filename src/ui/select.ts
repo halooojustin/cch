@@ -122,6 +122,11 @@ export function interactiveSelect(
 
       // 底部边框
       if (this.state === "submit") {
+        if (deleteTriggered) {
+          const selected = items[this.cursor];
+          const name = selected ? truncate(selected.label.trim(), cols - 10) : "";
+          return `${pc.gray(S_BAR_END)}  ${pc.red("✕")} ${pc.strikethrough(pc.dim(name))}`;
+        }
         const selected = items[this.cursor];
         const msg = selected ? truncate(selected.label.trim(), cols - 6) : "";
         return `${pc.gray(S_BAR_END)}  ${pc.dim(msg)}`;
