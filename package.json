@@ -1,6 +1,6 @@
 {
   "name": "@halooojustin/cch",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Claude Code History — AI-powered conversation history management with Zellij/tmux session support",
   "type": "module",
   "bin": {
