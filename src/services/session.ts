@@ -70,6 +70,36 @@ export async function killSession(name: string): Promise<void> {
   removeSessionMeta(name);
 }
 
+export async function forkSession(sessionId: string, cwd: string, description?: string, useMux = false): Promise<void> {
+  if (!useMux) {
+    const { execFileSync } = await import("node:child_process");
+    const config = getConfig();
+    execFileSync(config.claudeCommand, [...config.claudeArgs, "--resume", sessionId, "--fork-session"], {
+      stdio: "inherit",
+      cwd,
+    });
+    return;
+  }
+
+  const backend = await getBackend();
+  const config = getConfig();
+  const dirName = basename(cwd);
+  const name = `ch-${dirName}-fork-${sessionId.slice(0, 8)}`;
+
+  setSessionMeta(name, {
+    description: description ? `fork: ${description}` : `fork of ${sessionId.slice(0, 8)}`,
+    cwd,
+    createdAt: new Date().toISOString(),
+  });
+
+  backend.createSession({
+    name,
+    command: config.claudeCommand,
+    args: [...config.claudeArgs, "--resume", sessionId, "--fork-session"],
+    cwd,
+  });
+}
+
 export async function resumeDirectly(sessionId: string, cwd: string): Promise<void> {
   const { execFileSync } = await import("node:child_process");
   const config = getConfig();
