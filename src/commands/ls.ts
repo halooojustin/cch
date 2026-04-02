@@ -17,8 +17,8 @@ export async function lsCommand(n: number, useMux: boolean, useGroup: boolean): 
 
   if (useGroup) {
     process.stderr.write("Grouping sessions...\r");
-    const groups = assignGroups(sessions);
-    const grouped = groupSessions(sessions, groups);
+    const cache = assignGroups(sessions);
+    const grouped = groupSessions(sessions, cache);
     process.stderr.write("                    \r");
 
     items = [];
@@ -27,7 +27,14 @@ export async function lsCommand(n: number, useMux: boolean, useGroup: boolean): 
     for (const group of grouped) {
       const lines = formatSessionLines(group.sessions);
       for (let i = 0; i < group.sessions.length; i++) {
-        const prefix = i === 0 ? `\x1b[33m[${group.name}]\x1b[0m ` : "  ";
+        let prefix: string;
+        if (i === 0) {
+          // Group header: name + description
+          const desc = group.description ? ` \x1b[2m${group.description}\x1b[0m` : "";
+          prefix = `\x1b[33m[${group.name}]\x1b[0m${desc}\n    `;
+        } else {
+          prefix = "    ";
+        }
         items.push({ label: `${prefix}${lines[i]}`, value: globalIdx });
         allSessions.push(group.sessions[i]);
         globalIdx++;
@@ -41,7 +48,7 @@ export async function lsCommand(n: number, useMux: boolean, useGroup: boolean): 
 
   const hint = useGroup
     ? `↑↓/jk 导航 · 数字跳转 · Enter 恢复 · Esc 取消`
-    : `↑↓/jk 导航 · 数字跳转 · Enter 恢复 · Esc 取消 · 提示: ch ls -g 可按项目分组`;
+    : `↑↓/jk 导航 · 数字跳转 · Enter 恢复 · Esc 取消 · \x1b[2mch ls -g 按项目分组\x1b[0m`;
 
   const selected = await interactiveSelect(items, { hint });
 
