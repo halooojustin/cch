@@ -25,16 +25,12 @@ export async function lsCommand(n: number, useMux: boolean, useGroup: boolean): 
     allSessions = [];
     let globalIdx = 0;
     for (const group of grouped) {
-      const lines = formatSessionLines(group.sessions);
+      // In grouped mode: hide branch and project (already grouped by project)
+      const lines = formatSessionLines(group.sessions, { hideBranch: true, hideProject: true });
       for (let i = 0; i < group.sessions.length; i++) {
-        let prefix: string;
-        if (i === 0) {
-          // Group header: name + description
-          const desc = group.description ? ` \x1b[2m${group.description}\x1b[0m` : "";
-          prefix = `\x1b[33m[${group.name}]\x1b[0m${desc}\n    `;
-        } else {
-          prefix = "    ";
-        }
+        const prefix = i === 0
+          ? `\x1b[33m${group.name}\x1b[0m \x1b[2m${group.description || ""}\x1b[0m\n  `
+          : "  ";
         items.push({ label: `${prefix}${lines[i]}`, value: globalIdx });
         allSessions.push(group.sessions[i]);
         globalIdx++;

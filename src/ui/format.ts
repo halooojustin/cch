@@ -68,33 +68,38 @@ function branchText(s: SessionInfo): string {
 /**
  * 批量格式化会话行（动态计算列宽，保证对齐）
  */
-export function formatSessionLines(sessions: SessionInfo[]): string[] {
-  // 阶段1：提取纯文本，计算各列最大宽度
+export function formatSessionLines(sessions: SessionInfo[], opts?: { hideBranch?: boolean; hideProject?: boolean }): string[] {
+  const showBranch = !opts?.hideBranch;
+  const showProject = !opts?.hideProject;
+
   const rows = sessions.map((s, i) => ({
     num: String(i + 1).padStart(String(sessions.length).length),
     project: projectPath(s),
     ts: localTime(s.mtime || s.timestamp),
-    branch: branchText(s),
+    branch: showBranch ? branchText(s) : "",
     msg: s.firstMsg.replace(/\n/g, " ").slice(0, 50),
   }));
 
   const maxProject = Math.min(Math.max(...rows.map((r) => stringWidth(r.project))), 30);
-  const maxBranch = Math.max(...rows.map((r) => stringWidth(r.branch)), 1);
+  const maxBranch = showBranch ? Math.max(...rows.map((r) => stringWidth(r.branch)), 1) : 0;
 
-  const hasProject = rows.some((r) => r.project);
+  const hasProject = showProject && rows.some((r) => r.project);
 
-  // 阶段2：用统一列宽格式化
   return rows.map((r) => {
     const num = dim(r.num);
     const ts = yellow(r.ts);
-    const branch = r.branch
-      ? green(padEndWidth(r.branch, maxBranch))
-      : " ".repeat(maxBranch);
     const parts = [num];
     if (hasProject) {
       parts.push(cyan(padEndWidth(r.project.length > 30 ? r.project.slice(0, 30) : r.project, maxProject)));
     }
-    parts.push(ts, branch, r.msg);
+    parts.push(ts);
+    if (showBranch) {
+      const branch = r.branch
+        ? green(padEndWidth(r.branch, maxBranch))
+        : " ".repeat(maxBranch);
+      parts.push(branch);
+    }
+    parts.push(r.msg);
     return parts.join(" ");
   });
 }
