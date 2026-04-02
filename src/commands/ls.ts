@@ -6,7 +6,7 @@ import { interactiveSelect } from "../ui/select.js";
 import type { SessionInfo } from "../utils/jsonl.js";
 
 export async function lsCommand(n: number, useMux: boolean, useGroup: boolean): Promise<void> {
-  const sessions = loadSessions(n);
+  const sessions = loadSessions(useGroup ? Math.max(n, 50) : n);
   if (!sessions.length) {
     console.log("No Claude Code history found in ~/.claude/projects/");
     return;
