@@ -22,7 +22,7 @@ program
 program
   .command("ls")
   .description("List recent conversation history")
-  .option("-n, --number <n>", "Number of sessions to show", "20")
+  .option("-n, --number <n>", "Number of sessions to show", "50")
   .option("-m, --mux", "Resume in multiplexer (tmux/Zellij) instead of current terminal")
   .option("-g, --group", "Group sessions by project/topic using AI")
   .action(async (opts) => lsCommand(parseInt(opts.number, 10), opts.mux || false, opts.group || false));
