@@ -17,8 +17,8 @@ export function loadSessions(limit?: number): SessionInfo[] {
   const config = getConfig();
   const n = limit ?? config.historyLimit;
   const cache = getCache() as Record<string, CacheEntry>;
-  // 传入 cache，让 scanAllSessions 跳过缓存命中文件的解析
-  const sessions = scanAllSessions(n, cache, config.excludeDirs);
+  // Over-fetch to compensate for noise filtering (hi, test, etc.)
+  const sessions = scanAllSessions(Math.ceil(n * 1.5), cache, config.excludeDirs);
   const newCache: Record<string, CacheEntry> = {};
 
   const result: SessionInfo[] = [];
@@ -54,7 +54,7 @@ export function loadSessions(limit?: number): SessionInfo[] {
   }
 
   writeCache(newCache as unknown as Record<string, unknown>);
-  return result;
+  return result.slice(0, n);
 }
 
 export function searchSessions(keyword: string): SessionInfo[] {
